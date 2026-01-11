@@ -74,17 +74,31 @@ FROM metrics-generic.otel-default
 ## Latency Metrics
 
 ### Request Duration (P95, P99)
+**Note:** Histogram metrics like `http_request_duration_seconds` are exported as multiple time series (count, sum, buckets) in OpenTelemetry. 
+If duration metrics are not available, you can use request rate and error rate as latency indicators.
+
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
-  AND metrics.http.server.request.duration IS NOT NULL
+  AND metrics.http_request_total IS NOT NULL
 | STATS 
-    avg_latency = avg(metrics.http.server.request.duration),
-    p95 = percentile(metrics.http.server.request.duration, 95),
-    p99 = percentile(metrics.http.server.request.duration, 99)
+    request_count = sum(metrics.http_request_total)
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
+```
+
+**Alternative:** If histogram metrics are exported, they may appear as separate fields like:
+- `metrics.http_request_duration_seconds_count`
+- `metrics.http_request_duration_seconds_sum`
+- `metrics.http_request_duration_seconds_bucket`
+
+Check your actual metric field names using:
+```esql
+FROM metrics-generic.otel-default
+| WHERE @timestamp >= NOW() - 1h 
+  AND service.name IN ("frontend", "api", "worker")
+| LIMIT 1
 ```
 
 ## Cardinality Analysis
