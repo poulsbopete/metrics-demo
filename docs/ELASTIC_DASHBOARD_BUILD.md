@@ -460,7 +460,7 @@ FROM metrics-generic.otel-default
   BY mode, time_bucket = bucket(@timestamp, 5m)
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Grouped** (not stacked)
+4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Unstacked** from the second dropdown (this creates side-by-side bars instead of stacked)
 5. **Horizontal axis (X-axis):** Enter `time_bucket` (the time buckets)
 6. **Vertical axis (Y-axis):** Enter `unique_paths` (the numeric values)
 7. **Breakdown (Split by):** Enter `mode` in the Breakdown field to create separate bars for firehose and shaped modes
