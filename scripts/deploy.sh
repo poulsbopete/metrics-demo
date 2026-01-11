@@ -59,12 +59,6 @@ kubectl create configmap demo-config \
     -n "$NAMESPACE" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-# Create/update collector config
-kubectl create configmap otel-collector-config \
-    --from-literal=collector.yaml="$COLLECTOR_YAML" \
-    -n "$NAMESPACE" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
 # Create/update loadgen script
 kubectl create configmap loadgen-script \
     --from-literal=k6-script.js="$K6_SCRIPT" \
@@ -75,6 +69,12 @@ kubectl create configmap loadgen-script \
 cd "$REPO_ROOT/k8s/overlays/$OVERLAY"
 kubectl apply -k .
 cd "$REPO_ROOT"
+
+# Update collector config AFTER kustomize (to override the placeholder)
+kubectl create configmap otel-collector-config \
+    --from-literal=collector.yaml="$COLLECTOR_YAML" \
+    -n "$NAMESPACE" \
+    --dry-run=client -o yaml | kubectl apply -f -
 
 # Wait for deployments
 echo "Waiting for deployments to be ready..."
