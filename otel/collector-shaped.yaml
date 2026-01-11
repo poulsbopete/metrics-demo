@@ -62,8 +62,8 @@ processors:
     passthrough: true
     extract:
       metadata:
-        - podName
-        - podUID
+        - pod.name
+        - pod.uid
       labels:
         - tag_name: k8s.pod.label.app
           key: app
