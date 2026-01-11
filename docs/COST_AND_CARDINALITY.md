@@ -289,11 +289,11 @@ queue_saturation = queue_depth / queue_capacity
 
 ## Best Practices
 
-### 1. Start with SLO Requirements
+### 1. Start with Service Level Objective Requirements
 
 Before collecting metrics, define:
-- What SLOs do you need to monitor?
-- What labels are required for those SLOs?
+- What Service Level Objectives do you need to monitor?
+- What labels are required for those Service Level Objectives?
 - What labels can be aggregated?
 
 ### 2. Shape at the Source
