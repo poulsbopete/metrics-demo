@@ -83,7 +83,7 @@ FROM metrics-generic.otel-default
   AND service.name IN ("frontend", "api", "worker")
   AND metrics.http_request_total IS NOT NULL
 | STATS 
-    request_count = sum(metrics.http_request_total)
+    request_count = count()
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
 ```
