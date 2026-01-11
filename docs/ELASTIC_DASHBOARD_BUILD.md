@@ -220,11 +220,14 @@ FROM metrics-generic.otel-default
 | LIMIT 20
 ```
 4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Horizontal** orientation
-5. **Horizontal axis (X-axis):** Enter `user_count` (the numeric values)
-6. **Vertical axis (Y-axis):** Enter `attributes.user_id` (the categories/labels)
+5. **Horizontal axis (X-axis):** Enter `user_count` (the numeric values - this will be the bar lengths)
+6. **Vertical axis (Y-axis):** Enter `attributes.user_id` (the categories/labels - this will list the user IDs)
 7. Click **Apply and close** to save the visualization
 
-**Note:** For horizontal bar charts, the horizontal axis should be the numeric values and the vertical axis should be the categories. If you get an error about data types, make sure `user_count` is on the horizontal axis and `attributes.user_id` is on the vertical axis.
+**Important:** If you get an error "Expected number but have string" on the vertical axis:
+- Make sure you selected **Horizontal** bar chart (not vertical)
+- For horizontal bars: Horizontal axis = numbers, Vertical axis = categories (strings)
+- If using vertical bars: Horizontal axis = categories (strings), Vertical axis = numbers
 
 **Expected:** 20+ unique user IDs (proves high cardinality)
 
