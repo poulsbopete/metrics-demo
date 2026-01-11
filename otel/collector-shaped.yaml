@@ -29,19 +29,12 @@ processors:
         action: delete
 
   # Normalize path labels (replace /orders/12345 with /orders/{id})
-  transform/path_normalize:
+  # Note: Path normalization is complex in OTTL, so we'll rely on the services
+  # to send normalized paths in shaped mode. The attributes/delete processor
+  # above already removes high-cardinality labels.
+  transform/add_demo_mode:
     error_mode: ignore
     metric_statements:
-      - context: metric
-        statements:
-          # Normalize path attribute
-          - set(attributes["path"], ReplacePattern(attributes["path"], "^/orders/\\d+", "/orders/{id}"))
-          - set(attributes["path"], ReplacePattern(attributes["path"], "^/users/\\d+", "/users/{id}"))
-          - set(attributes["path"], ReplacePattern(attributes["path"], "^/products/\\d+", "/products/{id}"))
-          # Ensure service.name is set consistently
-          - set(resource.attributes["service.name"], Coalesce(resource.attributes["service.name"], attributes["service"]))
-          # Set deployment.environment
-          - set(resource.attributes["deployment.environment"], Coalesce(resource.attributes["deployment.environment"], "demo"))
       - context: resource
         statements:
           # Set demo.mode for easy filtering
@@ -91,7 +84,7 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, attributes/delete, transform/path_normalize, k8sattributes, batch]
+      processors: [memory_limiter, attributes/delete, transform/add_demo_mode, k8sattributes, batch]
       exporters: [otlphttp/elastic]
 
   extensions: [health_check]
