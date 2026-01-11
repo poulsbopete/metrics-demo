@@ -92,7 +92,7 @@ Before starting the demo, ensure:
    - **k8sattributes processor**: Adds useful metadata (but pod/container already removed)
 
 3. **Explain the Strategy**
-   - **Delete**: Remove labels that don't add value for SLO monitoring
+   - **Delete**: Remove labels that don't add value for Service Level Objective monitoring
    - **Normalize**: Replace high-cardinality values with patterns
    - **Keep**: Preserve labels needed for meaningful aggregation (service, method, status_code)
 
@@ -102,7 +102,7 @@ Before starting the demo, ensure:
    - **95% reduction in cardinality**
 
 ### Key Message
-**"By using OpenTelemetry Collector processors, we can shape metrics before they reach Elastic, reducing cardinality while preserving the metrics we need for SLO monitoring."**
+**"By using OpenTelemetry Collector processors, we can shape metrics before they reach Elastic, reducing cardinality while preserving the metrics we need for Service Level Objective monitoring."**
 
 ---
 
@@ -144,30 +144,30 @@ Before starting the demo, ensure:
      - Request rate per service
      - Error rate per service
      - Latency percentiles
-   - Explain how these are now usable for SLO monitoring
+   - Explain how these are now usable for Service Level Objective monitoring
 
 ### Key Message
-**"With shaping, we've reduced cardinality by 95% while preserving all the metrics we need for SLO monitoring. Our dashboards are now clean and actionable."**
+**"With shaping, we've reduced cardinality by 95% while preserving all the metrics we need for Service Level Objective monitoring. Our dashboards are now clean and actionable."**
 
 ---
 
-## Act 4: SLO-Level Metrics and Alerting (5 minutes)
+## Act 4: Service Level Objective-Level Metrics and Alerting (5 minutes)
 
 ### Setup
-- Show SLO-focused dashboards
+- Show Service Level Objective-focused dashboards
 - Demonstrate alerting scenarios
 
 ### Talk Track
 
-**"Now that we have clean metrics, let's see how they support SLO monitoring and alerting."**
+**"Now that we have clean metrics, let's see how they support Service Level Objective monitoring and alerting."**
 
-1. **SLO Metrics**
+1. **Service Level Objective Metrics**
    - **Availability**: `(total_requests - error_requests) / total_requests`
    - **Latency**: p95, p99 percentiles from histograms
    - **Error Rate**: `error_requests / total_requests`
    - **Saturation**: Queue depth, CPU utilization
 
-2. **Show SLO Dashboard**
+2. **Show Service Level Objective Dashboard**
    - Create or show a dashboard with:
      - Request rate (requests/second)
      - Error rate (percentage)
@@ -201,7 +201,7 @@ Before starting the demo, ensure:
    - **Dashboards**: Load faster, more responsive
 
 ### Key Message
-**"Shaped metrics give us the SLO-level metrics we need for monitoring and alerting, while dramatically reducing cost and improving performance."**
+**"Shaped metrics give us the Service Level Objective-level metrics we need for monitoring and alerting, while dramatically reducing cost and improving performance."**
 
 ---
 
@@ -211,14 +211,14 @@ Before starting the demo, ensure:
 
 1. **The Problem**: High-cardinality labels create exponential time series growth
 2. **The Solution**: OpenTelemetry Collector processors shape metrics before export
-3. **The Result**: 95% reduction in cardinality while preserving SLO metrics
+3. **The Result**: 95% reduction in cardinality while preserving Service Level Objective metrics
 4. **The Benefit**: Lower cost, faster queries, better dashboards, effective alerting
 
 ### Next Steps
 
 - Review the collector configurations
 - Experiment with different shaping strategies
-- Build SLO dashboards in Kibana
+- Build Service Level Objective dashboards in Kibana
 - Set up alerting rules
 
 ### Resources
@@ -237,7 +237,7 @@ Before starting the demo, ensure:
 4. **Questions**: Be prepared to explain:
    - Why not just filter in Elastic? (Answer: Shaping at the source is more efficient)
    - What if we need user_id later? (Answer: Keep it in traces, not metrics)
-   - How do we know what to remove? (Answer: Start with SLO requirements)
+   - How do we know what to remove? (Answer: Start with Service Level Objective requirements)
 
 ## Troubleshooting
 

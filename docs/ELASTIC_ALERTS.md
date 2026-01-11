@@ -78,10 +78,10 @@ Time Window: Last 5 minutes
 | Service Type | Error Rate Threshold | Rationale |
 |--------------|---------------------|-----------|
 | Critical API | 1% | Very low tolerance |
-| Standard API | 2% | Typical SLO target |
+| Standard API | 2% | Typical Service Level Objective target |
 | Background Worker | 5% | Higher tolerance for async jobs |
 
-**Adjust based on:** Service criticality, SLO targets, historical baselines.
+**Adjust based on:** Service criticality, Service Level Objective targets, historical baselines.
 
 ---
 
@@ -101,15 +101,15 @@ Time Window: Last 5 minutes
 
 ---
 
-## Alert 2: Latency SLO Burn
+## Alert 2: Latency Service Level Objective Burn
 
-**Purpose:** Alert when latency exceeds SLO threshold or burn rate.
+**Purpose:** Alert when latency exceeds Service Level Objective threshold or burn rate.
 
 ---
 
 ### Alert Configuration
 
-**Name:** `Latency P95 SLO Violation`
+**Name:** `Latency P95 Service Level Objective Violation`
 
 **Rule Type:** Threshold
 
@@ -167,10 +167,10 @@ FROM metrics-generic.otel-default
     request_count = count()
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | EVAL p95_ms = p95_latency * 1000
-| EVAL slo_violations = request_count FILTER(p95_ms > 500)
+| EVAL service_level_objective_violations = request_count FILTER(p95_ms > 500)
 | STATS 
     total_requests = sum(request_count),
-    violations = sum(slo_violations)
+    violations = sum(service_level_objective_violations)
   BY service.name
 | EVAL burn_rate = (violations / total_requests) * 100
 | WHERE burn_rate > 5
@@ -188,7 +188,7 @@ FROM metrics-generic.otel-default
 | Standard API | 500ms | Typical web service |
 | Background Worker | 1000ms | Async processing OK |
 
-**Adjust based on:** User expectations, SLO targets, historical p95 values.
+**Adjust based on:** User expectations, Service Level Objective targets, historical p95 values.
 
 ---
 
@@ -200,7 +200,7 @@ FROM metrics-generic.otel-default
 
 **Example Message:**
 ```
-Alert: Latency SLO Violation
+Alert: Latency Service Level Objective Violation
 Service: api
 P95 Latency: 750ms
 Threshold: 500ms
@@ -298,7 +298,7 @@ FROM metrics-generic.otel-default
 | CPU Work Units | 1000 | Service-specific (adjust) |
 | Memory Usage | 80% | Standard threshold |
 
-**Adjust based on:** Service capacity, historical baselines, SLO targets.
+**Adjust based on:** Service capacity, historical baselines, Service Level Objective targets.
 
 ---
 
@@ -390,7 +390,7 @@ Action: Consider scaling workers
 
 1. Navigate to **Observability** → **Alerts** → **Create rule**
 2. **Rule type:** ES|QL query
-3. **Name:** `Latency P95 SLO Violation`
+3. **Name:** `Latency P95 Service Level Objective Violation`
 4. **Query:**
    ```esql
    FROM metrics-generic.otel-default
@@ -492,11 +492,11 @@ service.name: frontend AND deployment.environment: production
 | Alert | Metric | Threshold | Window | Frequency |
 |-------|--------|-----------|--------|-----------|
 | High Error Rate | Error % | > 2% | 5 min | 1 min |
-| Latency SLO | P95 latency | > 500ms | 5 min | 1 min |
+| Latency Service Level Objective | P95 latency | > 500ms | 5 min | 1 min |
 | Saturation | Queue depth | > 100 | 5 min | 1 min |
 
 **Adjust thresholds based on:**
-- Service SLOs
+- Service Service Level Objectives
 - Historical baselines
 - Business requirements
 

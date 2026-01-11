@@ -209,7 +209,7 @@ http_requests_total{
 
 ### Keep (Low to Medium Cardinality)
 
-These labels are useful for SLO monitoring and have manageable cardinality:
+These labels are useful for Service Level Objective monitoring and have manageable cardinality:
 
 - **service**: Number of services (usually < 100)
 - **method**: HTTP methods (GET, POST, etc.) - usually < 10
@@ -219,7 +219,7 @@ These labels are useful for SLO monitoring and have manageable cardinality:
 
 ### Remove (High Cardinality)
 
-These labels create exponential growth and aren't needed for SLO monitoring:
+These labels create exponential growth and aren't needed for Service Level Objective monitoring:
 
 - **user_id**: Thousands to millions of unique values
 - **session_id**: Millions of unique values
@@ -238,11 +238,11 @@ These labels have high cardinality but can be normalized:
 - **user_agent**: `Mozilla/5.0...` → `browser` or `mobile`
 - **country_code**: Keep if needed, but consider aggregation
 
-## SLO-Level Metrics
+## Service Level Objective-Level Metrics
 
-The goal of shaping is to preserve **SLO-level metrics** while removing noise.
+The goal of shaping is to preserve **Service Level Objective-level metrics** while removing noise.
 
-### SLO Metrics
+### Service Level Objective Metrics
 
 **Availability**:
 ```
@@ -285,7 +285,7 @@ queue_saturation = queue_depth / queue_capacity
 - 20-30x faster dashboard loading
 - Effective alerting
 - Clean, actionable dashboards
-- SLO-level monitoring
+- Service Level Objective-level monitoring
 
 ## Best Practices
 
@@ -333,6 +333,6 @@ Normalize high-cardinality values in the collector:
 | **Query Time** | 30-60 seconds | 0.5-1 second | 30-60x faster |
 | **Dashboard Load** | 60+ seconds | 2-3 seconds | 20-30x faster |
 | **Alert Evaluation** | 10-20 seconds | 0.5-1 second | 10-20x faster |
-| **SLO Metrics** | Buried in noise | Clear and actionable | ✅ |
+| **Service Level Objective Metrics** | Buried in noise | Clear and actionable | ✅ |
 
-**Key Takeaway**: Shaping metrics reduces cost and improves performance while preserving the SLO-level metrics needed for effective monitoring and alerting.
+**Key Takeaway**: Shaping metrics reduces cost and improves performance while preserving the Service Level Objective-level metrics needed for effective monitoring and alerting.

@@ -1,6 +1,6 @@
 # Elastic Metrics Firehose to Shaped Demo
 
-A portable demo repository demonstrating how OpenTelemetry Collector metric shaping reduces time series cardinality and cost while preserving SLO-level metrics, with metrics sent to Elastic Serverless via OTLP.
+A portable demo repository demonstrating how OpenTelemetry Collector metric shaping reduces time series cardinality and cost while preserving Service Level Objective-level metrics, with metrics sent to Elastic Serverless via OTLP.
 
 ## Overview
 

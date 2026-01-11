@@ -265,7 +265,7 @@ app.get('/demo', (req, res) => {
 
   <div class="gold-metrics">
     <h3>🎯 Gold Metrics Only</h3>
-    <p style="opacity: 0.9; margin-bottom: 15px;">The four key metrics that matter for SLO monitoring. Signal preserved, cardinality reduced.</p>
+    <p style="opacity: 0.9; margin-bottom: 15px;">The four key metrics that matter for Service Level Objective monitoring. Metrics preserved, cardinality reduced.</p>
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-label">Request Rate</div>

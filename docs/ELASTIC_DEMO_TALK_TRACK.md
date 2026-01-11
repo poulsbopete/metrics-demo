@@ -2,7 +2,7 @@
 
 **Duration:** 10-15 minutes  
 **Audience:** Technical decision makers (SREs, DevOps, Observability Engineers)  
-**Goal:** Prove that OpenTelemetry Collector shaping reduces cost/cardinality while preserving SLO-level metrics
+**Goal:** Prove that OpenTelemetry Collector shaping reduces cost/cardinality while preserving Service Level Objective-level metrics
 
 ---
 

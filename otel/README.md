@@ -24,7 +24,7 @@ This directory contains two collector configurations demonstrating different app
 
 ## Shaped Configuration (`collector-shaped.yaml`)
 
-**Purpose**: Aggressively reduce cardinality while preserving SLO-level metrics.
+**Purpose**: Aggressively reduce cardinality while preserving Service Level Objective-level metrics.
 
 ### Processors:
 1. **memory_limiter**: Prevents OOM
@@ -52,7 +52,7 @@ This directory contains two collector configurations demonstrating different app
 ### Result:
 - Low time series cardinality (100-500 series)
 - Only meaningful labels preserved: `service`, `method`, `route`, `status_code`, `path` (normalized)
-- SLO-level metrics still available (latency, error rate, request rate)
+- Service Level Objective-level metrics still available (latency, error rate, request rate)
 
 ## Key Differences
 
