@@ -238,9 +238,9 @@ These labels have high cardinality but can be normalized:
 - **user_agent**: `Mozilla/5.0...` → `browser` or `mobile`
 - **country_code**: Keep if needed, but consider aggregation
 
-## SLO-Level Signal
+## SLO-Level Metrics
 
-The goal of shaping is to preserve **SLO-level signal** while removing noise.
+The goal of shaping is to preserve **SLO-level metrics** while removing noise.
 
 ### SLO Metrics
 
@@ -333,6 +333,6 @@ Normalize high-cardinality values in the collector:
 | **Query Time** | 30-60 seconds | 0.5-1 second | 30-60x faster |
 | **Dashboard Load** | 60+ seconds | 2-3 seconds | 20-30x faster |
 | **Alert Evaluation** | 10-20 seconds | 0.5-1 second | 10-20x faster |
-| **SLO Signal** | Buried in noise | Clear and actionable | ✅ |
+| **SLO Metrics** | Buried in noise | Clear and actionable | ✅ |
 
-**Key Takeaway**: Shaping metrics reduces cost and improves performance while preserving the SLO-level signal needed for effective monitoring and alerting.
+**Key Takeaway**: Shaping metrics reduces cost and improves performance while preserving the SLO-level metrics needed for effective monitoring and alerting.

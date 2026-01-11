@@ -6,7 +6,7 @@ This guide provides step-by-step instructions to build three dashboards for the 
 
 ## Dashboard A: Golden Signals Overview
 
-**Purpose:** Show the four golden signals (request rate, error rate, latency, saturation) to prove signal preservation.
+**Purpose:** Show the four golden signals (request rate, error rate, latency, saturation) to prove metrics preservation.
 
 **Time to Build:** 10-15 minutes
 

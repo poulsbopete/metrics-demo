@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Common issues and solutions for the Elastic Metrics Firehose to Signal demo.
+Common issues and solutions for the Elastic Metrics Firehose to Shaped demo.
 
 ## General Issues
 

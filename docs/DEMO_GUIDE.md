@@ -1,6 +1,6 @@
-# Demo Guide: Elastic Metrics Firehose to Signal
+# Demo Guide: Elastic Metrics Firehose to Shaped
 
-This guide provides a talk track for presenting the Elastic Metrics Firehose to Signal demo. The demo is structured in four acts, each demonstrating a key concept about metric cardinality and cost optimization.
+This guide provides a talk track for presenting the Elastic Metrics Firehose to Shaped demo. The demo is structured in four acts, each demonstrating a key concept about metric cardinality and cost optimization.
 
 ## Prerequisites
 
@@ -102,7 +102,7 @@ Before starting the demo, ensure:
    - **95% reduction in cardinality**
 
 ### Key Message
-**"By using OpenTelemetry Collector processors, we can shape metrics before they reach Elastic, reducing cardinality while preserving the signal we need for SLO monitoring."**
+**"By using OpenTelemetry Collector processors, we can shape metrics before they reach Elastic, reducing cardinality while preserving the metrics we need for SLO monitoring."**
 
 ---
 
@@ -151,7 +151,7 @@ Before starting the demo, ensure:
 
 ---
 
-## Act 4: SLO-Level Signal and Alerting (5 minutes)
+## Act 4: SLO-Level Metrics and Alerting (5 minutes)
 
 ### Setup
 - Show SLO-focused dashboards
@@ -201,7 +201,7 @@ Before starting the demo, ensure:
    - **Dashboards**: Load faster, more responsive
 
 ### Key Message
-**"Shaped metrics give us the SLO-level signal we need for monitoring and alerting, while dramatically reducing cost and improving performance."**
+**"Shaped metrics give us the SLO-level metrics we need for monitoring and alerting, while dramatically reducing cost and improving performance."**
 
 ---
 
@@ -211,7 +211,7 @@ Before starting the demo, ensure:
 
 1. **The Problem**: High-cardinality labels create exponential time series growth
 2. **The Solution**: OpenTelemetry Collector processors shape metrics before export
-3. **The Result**: 95% reduction in cardinality while preserving SLO signal
+3. **The Result**: 95% reduction in cardinality while preserving SLO metrics
 4. **The Benefit**: Lower cost, faster queries, better dashboards, effective alerting
 
 ### Next Steps

@@ -162,7 +162,7 @@ FROM metrics-generic.otel-default
 ```
 **Expected:** Error rate consistent (or zero if no errors).
 
-### ✅ 5. Core Signals Intact
+### ✅ 5. Core Metrics Intact
 **Dashboard:** "Golden Signals Overview" (see DASHBOARD_BUILD.md)
 **Expected:** All 4 gold metrics visible and updating.
 
@@ -219,8 +219,8 @@ kubectl get configmap otel-collector-config -n elastic-metrics-demo -o yaml | gr
 2. **Switch:** Run `./scripts/switch-mode.sh shaped`
 3. **Wait:** 60 seconds
 4. **Compare:** Show before/after cardinality queries
-5. **Prove:** Show gold metrics dashboard (signal preserved)
-6. **Close:** "Same signal. 50× fewer time series. Lower cost."
+5. **Prove:** Show gold metrics dashboard (metrics preserved)
+6. **Close:** "Same metrics. 50× fewer time series. Lower cost."
 
 ---
 

@@ -24,7 +24,7 @@ This directory contains two collector configurations demonstrating different app
 
 ## Shaped Configuration (`collector-shaped.yaml`)
 
-**Purpose**: Aggressively reduce cardinality while preserving SLO-level signal.
+**Purpose**: Aggressively reduce cardinality while preserving SLO-level metrics.
 
 ### Processors:
 1. **memory_limiter**: Prevents OOM

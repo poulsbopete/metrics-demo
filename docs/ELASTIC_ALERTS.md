@@ -6,7 +6,7 @@ This document defines three alert examples that demonstrate how shaping improves
 
 ## Alert 1: High Error Rate
 
-**Purpose:** Alert when error rate exceeds threshold, proving signal preservation.
+**Purpose:** Alert when error rate exceeds threshold, proving metrics preservation.
 
 ---
 
@@ -220,7 +220,7 @@ Time Window: Last 5 minutes
 **After (Shaped):**
 - P95 calculated at service level (aggregated)
 - Alert fires on service-wide issues
-- Clearer signal (no pod noise)
+- Clearer metrics (no pod noise)
 
 **Talk Point:** "Shaped metrics give you service-level latency, not pod-level noise."
 
@@ -330,7 +330,7 @@ Action: Consider scaling workers
 
 **After (Shaped):**
 - Alert fires at service level (one alert)
-- Clear service-wide saturation signal
+- Clear service-wide saturation metrics
 - Actionable (scale service, not individual pods)
 
 **Talk Point:** "One alert per service, not one per pod. That's the difference."

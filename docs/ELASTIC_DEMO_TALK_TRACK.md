@@ -1,8 +1,8 @@
-# Elastic Demo Talk Track - Firehose to Signal
+# Elastic Demo Talk Track - Firehose to Shaped
 
 **Duration:** 10-15 minutes  
 **Audience:** Technical decision makers (SREs, DevOps, Observability Engineers)  
-**Goal:** Prove that OpenTelemetry Collector shaping reduces cost/cardinality while preserving SLO-level signals
+**Goal:** Prove that OpenTelemetry Collector shaping reduces cost/cardinality while preserving SLO-level metrics
 
 ---
 
@@ -126,7 +126,7 @@ FROM metrics-generic.otel-default
 
 **Visual:** Side-by-side comparison (before/after documents).
 
-**What to say:** "The collector removed the high-cardinality labels and normalized the paths. Same signal, cleaner data."
+**What to say:** "The collector removed the high-cardinality labels and normalized the paths. Same metrics, cleaner data."
 
 ### Prove Cardinality Dropped
 
@@ -149,7 +149,7 @@ FROM metrics-generic.otel-default
 
 ### The Aha Moment
 
-**What to say:** "Here's the key insight: **Same signal. 50× fewer time series.**"
+**What to say:** "Here's the key insight: **Same metrics. 50× fewer time series.**"
 
 **Visual:** Show comparison table or side-by-side queries.
 
@@ -157,11 +157,11 @@ FROM metrics-generic.otel-default
 
 ---
 
-## Act 4: Signal Preservation (3-4 minutes)
+## Act 4: Metrics Preservation (3-4 minutes)
 
 ### The Gold Metrics
 
-**What to say:** "But here's what really matters: did we lose any signal? Let's check the four golden signals."
+**What to say:** "But here's what really matters: did we lose any metrics? Let's check the four golden signals."
 
 **Actions:**
 1. Open "Golden Signals Overview" dashboard (or build it live)
@@ -173,7 +173,7 @@ FROM metrics-generic.otel-default
 
 **Visual:** Dashboard with 4 panels updating.
 
-**What to say:** "All four signals are intact. We can still see request rate, error rate, latency, and saturation. Nothing was lost."
+**What to say:** "All four golden signals are intact. We can still see request rate, error rate, latency, and saturation. Nothing was lost."
 
 ### Prove Request Rate Preserved
 
@@ -234,13 +234,13 @@ FROM metrics-generic.otel-default
 2. ✅ **Cardinality dropped 90%+** — Fewer time series
 3. ✅ **Request rate preserved** — Same visibility
 4. ✅ **Error rate preserved** — Same visibility
-5. ✅ **Core signals intact** — All gold metrics working
+5. ✅ **Core metrics intact** — All gold metrics working
 
 **Visual:** Show summary slide or dashboard.
 
 ### The Value Proposition
 
-**What to say:** "Same signal. 50× fewer time series. Lower cost. Faster queries. That's the power of OpenTelemetry Collector shaping with Elastic."
+**What to say:** "Same metrics. 50× fewer time series. Lower cost. Faster queries. That's the power of OpenTelemetry Collector shaping with Elastic."
 
 **Question to ask:** "What would you do with 90% lower observability costs? *[Let them think]* You could instrument more services, keep more history, or just save money."
 
@@ -263,7 +263,7 @@ FROM metrics-generic.otel-default
 **A:** "Yes. The OpenTelemetry Collector can receive Prometheus metrics, shape them, and export to Elastic. Same principles apply."
 
 ### Q: "What about traces and logs?"
-**A:** "This demo focuses on metrics, but the collector can shape traces and logs too. The same 'remove waste, preserve signal' principle applies."
+**A:** "This demo focuses on metrics, but the collector can shape traces and logs too. The same 'remove waste, preserve metrics' principle applies."
 
 ### Q: "How do I know what to remove?"
 **A:** "Start with labels that change frequently but don't affect alerting: pod names, container IDs, instance IDs, build IDs. Keep service, method, route, status code."
@@ -278,7 +278,7 @@ FROM metrics-generic.otel-default
 **When to pause:**
 - After showing cardinality explosion (let it sink in)
 - After switching to shaped mode (build anticipation)
-- After showing signal preservation (the "aha" moment)
+- After showing metrics preservation (the "aha" moment)
 
 **When to ask questions:**
 - After showing high cardinality ("How many of you have seen this?")
@@ -286,7 +286,7 @@ FROM metrics-generic.otel-default
 - After showing results ("How much would you save?")
 
 **When to emphasize:**
-- "Same signal. 50× fewer time series." (repeat 2-3 times)
+- "Same metrics. 50× fewer time series." (repeat 2-3 times)
 - "Pre-ingest shaping" (differentiator)
 - "90% reduction" (the number that matters)
 
@@ -297,7 +297,7 @@ FROM metrics-generic.otel-default
 ### Short Version (5 minutes)
 - Skip Act 1 deep dive
 - Jump straight to Act 3 (show before/after)
-- Focus on Act 4 (signal preservation)
+- Focus on Act 4 (metrics preservation)
 
 ### Deep Dive Version (20 minutes)
 - Add Act 0: Show collector configuration in detail
@@ -306,7 +306,7 @@ FROM metrics-generic.otel-default
 
 ### Executive Version (3 minutes)
 - Show dashboard only
-- Explain: "Before: 10,000 time series. After: 200 time series. Same signal."
+- Explain: "Before: 10,000 time series. After: 200 time series. Same metrics."
 - Show cost savings estimate
 
 ---

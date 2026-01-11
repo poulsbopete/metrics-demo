@@ -1,6 +1,6 @@
 # Elastic Validation Queries
 
-This document provides KQL and ES|QL queries to validate the demo and prove cardinality reduction while preserving signal.
+This document provides KQL and ES|QL queries to validate the demo and prove cardinality reduction while preserving metrics.
 
 ---
 
@@ -9,7 +9,7 @@ This document provides KQL and ES|QL queries to validate the demo and prove card
 1. [Ingestion Validation](#ingestion-validation)
 2. [Service Discovery](#service-discovery)
 3. [Cardinality Analysis](#cardinality-analysis)
-4. [Signal Preservation](#signal-preservation)
+4. [Metrics Preservation](#metrics-preservation)
 5. [Before/After Comparison](#beforeafter-comparison)
 
 ---
@@ -247,7 +247,7 @@ FROM metrics-generic.otel-default
 
 ---
 
-## Signal Preservation
+## Metrics Preservation
 
 ### Request Rate (Before/After)
 
