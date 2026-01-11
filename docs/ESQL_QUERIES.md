@@ -272,9 +272,9 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 5m
   AND service.name IN ("frontend", "api", "worker")
 | STATS 
-    count() AS metric_count,
-    count_distinct(service.name) AS services_seen
-  BY bucket(@timestamp, 30s)
+    metric_count = count(),
+    services_seen = count_distinct(service.name)
+  BY time_bucket = bucket(@timestamp, 30s)
 | SORT time_bucket DESC
 ```
 
