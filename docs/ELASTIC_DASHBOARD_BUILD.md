@@ -248,10 +248,10 @@ FROM metrics-generic.otel-default
 | SORT path_count DESC
 | LIMIT 20
 ```
-4. **Chart type:** Bar chart (horizontal)
-5. **X-axis:** `path_count`
-6. **Y-axis:** `attributes.path`
-7. Click **Save and return**
+4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Horizontal** orientation
+5. **Horizontal axis (X-axis):** Enter `path_count` (the numeric values)
+6. **Vertical axis (Y-axis):** Enter `attributes.path` (the categories/labels)
+7. Click **Apply and close** to save the visualization
 
 **Expected:** Many paths with numeric IDs (e.g., `/orders/12345`, `/orders/67890`)
 
