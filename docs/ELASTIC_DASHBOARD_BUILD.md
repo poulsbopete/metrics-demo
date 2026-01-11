@@ -440,15 +440,19 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
-| EVAL mode = CASE(
-    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
-    "firehose", 
-    "shaped"
-  )
+| EVAL 
+    mode = CASE(
+      resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+      "firehose", 
+      "shaped"
+    ),
+    with_user_id_val = CASE(attributes.user_id IS NOT NULL, 1, 0),
+    with_pod_val = CASE(attributes.pod IS NOT NULL, 1, 0),
+    with_build_id_val = CASE(attributes.build_id IS NOT NULL, 1, 0)
 | STATS 
-    with_user_id = count() FILTER(attributes.user_id IS NOT NULL),
-    with_pod = count() FILTER(attributes.pod IS NOT NULL),
-    with_build_id = count() FILTER(attributes.build_id IS NOT NULL),
+    with_user_id = sum(with_user_id_val),
+    with_pod = sum(with_pod_val),
+    with_build_id = sum(with_build_id_val),
     total = count()
   BY mode
 ```
