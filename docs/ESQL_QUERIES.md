@@ -52,9 +52,9 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
-| STATS avg(metrics.http.server.active_requests) AS avg_requests 
-  BY service.name, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS avg_requests = avg(metrics.http.server.active_requests) 
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ### Error Rate by Service
@@ -63,9 +63,9 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
   AND attributes.http.response.status_code >= 400
-| STATS count() AS error_count 
-  BY service.name, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS error_count = count() 
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ## Latency Metrics
@@ -77,11 +77,11 @@ FROM metrics-generic.otel-default
   AND service.name IN ("frontend", "api", "worker")
   AND metrics.http.server.request.duration IS NOT NULL
 | STATS 
-    avg(metrics.http.server.request.duration) AS avg_latency,
-    percentile(metrics.http.server.request.duration, 95) AS p95,
-    percentile(metrics.http.server.request.duration, 99) AS p99
-  BY service.name, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+    avg_latency = avg(metrics.http.server.request.duration),
+    p95 = percentile(metrics.http.server.request.duration, 95),
+    p99 = percentile(metrics.http.server.request.duration, 99)
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ## Cardinality Analysis
@@ -134,9 +134,9 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
   AND metrics.process.cpu.utilization IS NOT NULL
-| STATS avg(metrics.process.cpu.utilization) AS avg_cpu 
-  BY service.name, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS avg_cpu = avg(metrics.process.cpu.utilization) 
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ### Memory Usage by Service
@@ -145,9 +145,9 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
   AND metrics.process.memory.usage IS NOT NULL
-| STATS avg(metrics.process.memory.usage) AS avg_memory 
-  BY service.name, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS avg_memory = avg(metrics.process.memory.usage) 
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ## Path Normalization Check
@@ -230,12 +230,12 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
   AND attributes.http.request.method IS NOT NULL
-| STATS count() AS request_count
+| STATS request_count = count()
   BY service.name,
      attributes.http.request.method,
      attributes.http.response.status_code,
-     bucket(@timestamp, 1m)
-| SORT @timestamp DESC, request_count DESC
+     time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC, request_count DESC
 ```
 
 ### HTTP Request Rate (Requests per Minute)
@@ -244,10 +244,10 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
   AND attributes.http.request.method IS NOT NULL
-| STATS count() AS requests
-  BY service.name, bucket(@timestamp, 1m)
-| STATS sum(requests) AS total_requests,
-        avg(requests) AS avg_per_minute
+| STATS requests = count()
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| STATS total_requests = sum(requests),
+        avg_per_minute = avg(requests)
   BY service.name
 ```
 
