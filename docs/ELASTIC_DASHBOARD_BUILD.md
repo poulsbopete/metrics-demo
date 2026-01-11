@@ -219,15 +219,17 @@ FROM metrics-generic.otel-default
 | SORT user_count DESC
 | LIMIT 20
 ```
-4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Horizontal** orientation
-5. **Horizontal axis (X-axis):** Enter `user_count` (the numeric values - this will be the bar lengths)
-6. **Vertical axis (Y-axis):** Enter `attributes.user_id` (the categories/labels - this will list the user IDs)
+4. **Chart type:** Select **Bar** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `attributes.user_id` (the categories - user IDs as strings)
+6. **Vertical axis (Y-axis):** Enter `user_count` (the numeric values - counts)
 7. Click **Apply and close** to save the visualization
 
-**Important:** If you get an error "Expected number but have string" on the vertical axis:
-- Make sure you selected **Horizontal** bar chart (not vertical)
-- For horizontal bars: Horizontal axis = numbers, Vertical axis = categories (strings)
-- If using vertical bars: Horizontal axis = categories (strings), Vertical axis = numbers
+**Alternative (Table view):** If you prefer a table format instead of a chart:
+- Select **Table** as the chart type
+- The table will automatically show `user_count` and `attributes.user_id` columns
+- You can sort by clicking column headers
+
+**Note:** In Kibana's Bar chart, categories (strings) go on the horizontal axis and values (numbers) go on the vertical axis. This creates vertical bars, which is the standard orientation.
 
 **Expected:** 20+ unique user IDs (proves high cardinality)
 
@@ -251,9 +253,9 @@ FROM metrics-generic.otel-default
 | SORT path_count DESC
 | LIMIT 20
 ```
-4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Horizontal** orientation
-5. **Horizontal axis (X-axis):** Enter `path_count` (the numeric values)
-6. **Vertical axis (Y-axis):** Enter `attributes.path` (the categories/labels)
+4. **Chart type:** Select **Bar** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `attributes.path` (the categories - paths as strings)
+6. **Vertical axis (Y-axis):** Enter `path_count` (the numeric values - counts)
 7. Click **Apply and close** to save the visualization
 
 **Expected:** Many paths with numeric IDs (e.g., `/orders/12345`, `/orders/67890`)
