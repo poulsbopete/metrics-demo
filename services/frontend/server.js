@@ -7,7 +7,6 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
-const { NodeSDK } = require('@opentelemetry/sdk-node');
 
 const app = express();
 app.use(express.json());
