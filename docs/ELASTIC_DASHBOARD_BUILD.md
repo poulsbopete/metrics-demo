@@ -219,10 +219,12 @@ FROM metrics-generic.otel-default
 | SORT user_count DESC
 | LIMIT 20
 ```
-4. **Chart type:** Bar chart (horizontal)
-5. **X-axis:** `user_count`
-6. **Y-axis:** `attributes.user_id`
-7. Click **Save and return**
+4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Horizontal** orientation
+5. **Horizontal axis (X-axis):** Enter `user_count` (the numeric values)
+6. **Vertical axis (Y-axis):** Enter `attributes.user_id` (the categories/labels)
+7. Click **Apply and close** to save the visualization
+
+**Note:** For horizontal bar charts, the horizontal axis should be the numeric values and the vertical axis should be the categories. If you get an error about data types, make sure `user_count` is on the horizontal axis and `attributes.user_id` is on the vertical axis.
 
 **Expected:** 20+ unique user IDs (proves high cardinality)
 
@@ -439,11 +441,11 @@ FROM metrics-generic.otel-default
   BY mode, time_bucket = bucket(@timestamp, 5m)
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Bar chart (grouped)
-5. **X-axis:** `time_bucket`
-6. **Y-axis:** `unique_paths`
-7. **Split by:** `mode`
-8. Click **Save and return**
+4. **Chart type:** Select **Bar** from the chart type dropdown, then select **Grouped** (not stacked)
+5. **Horizontal axis (X-axis):** Enter `time_bucket` (the time buckets)
+6. **Vertical axis (Y-axis):** Enter `unique_paths` (the numeric values)
+7. **Breakdown (Split by):** Enter `mode` in the Breakdown field to create separate bars for firehose and shaped modes
+8. Click **Apply and close** to save the visualization
 
 **Expected:**
 - Firehose: 50-200 unique paths
