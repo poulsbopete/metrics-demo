@@ -21,20 +21,12 @@ processors:
     auth_type: serviceAccount
     passthrough: true
     extract:
-      metadata:
-        - pod.name
-        - pod.uid
-        - container.name
       labels:
         - tag_name: k8s.pod.label.app
           key: app
           from: pod
         - tag_name: k8s.namespace.name
           key: namespace
-          from: pod
-      annotations:
-        - tag_name: k8s.pod.annotation.prometheus.io/scrape
-          key: prometheus.io/scrape
           from: pod
 
 exporters:

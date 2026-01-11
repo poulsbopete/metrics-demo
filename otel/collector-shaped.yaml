@@ -61,9 +61,6 @@ processors:
     auth_type: serviceAccount
     passthrough: true
     extract:
-      metadata:
-        - pod.name
-        - pod.uid
       labels:
         - tag_name: k8s.pod.label.app
           key: app
