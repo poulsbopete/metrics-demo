@@ -57,9 +57,14 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
+| EVAL is_error = CASE(
+    attributes.status_code LIKE "4*" OR attributes.status_code LIKE "5*", 
+    1, 
+    0
+  )
 | STATS 
     total_requests = count(),
-    errors = count() FILTER(attributes.status_code LIKE "4*" OR attributes.status_code LIKE "5*")
+    errors = sum(is_error)
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | EVAL error_rate = (errors / total_requests) * 100
 | SORT time_bucket DESC
@@ -306,11 +311,16 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
+| EVAL 
+    has_user_id_val = CASE(attributes.user_id IS NOT NULL, 1, 0),
+    has_pod_val = CASE(attributes.pod IS NOT NULL, 1, 0),
+    has_build_id_val = CASE(attributes.build_id IS NOT NULL, 1, 0),
+    has_path_val = CASE(attributes.path IS NOT NULL, 1, 0)
 | STATS 
-    has_user_id = count() FILTER(attributes.user_id IS NOT NULL),
-    has_pod = count() FILTER(attributes.pod IS NOT NULL),
-    has_build_id = count() FILTER(attributes.build_id IS NOT NULL),
-    has_path = count() FILTER(attributes.path IS NOT NULL),
+    has_user_id = sum(has_user_id_val),
+    has_pod = sum(has_pod_val),
+    has_build_id = sum(has_build_id_val),
+    has_path = sum(has_path_val),
     total = count()
 ```
 4. **Chart type:** Data Table
@@ -500,10 +510,13 @@ FROM metrics-generic.otel-default
 | STATS count()
   BY mode, attributes.user_id, attributes.path, attributes.pod
 | STATS series_count = count() BY mode
+| EVAL 
+    firehose = CASE(mode == "firehose", series_count, null),
+    shaped = CASE(mode == "shaped", series_count, null)
 | STATS 
-    firehose = max(series_count) FILTER(mode == "firehose"),
-    shaped = max(series_count) FILTER(mode == "shaped")
-| EVAL reduction_pct = ((firehose - shaped) / firehose) * 100
+    firehose_max = max(firehose),
+    shaped_max = max(shaped)
+| EVAL reduction_pct = ((firehose_max - shaped_max) / firehose_max) * 100
 ```
 
 ---
