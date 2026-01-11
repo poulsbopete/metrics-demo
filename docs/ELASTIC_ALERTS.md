@@ -2,6 +2,8 @@
 
 This document defines three alert examples that demonstrate how shaping improves alert quality.
 
+**Note:** For automated Service Level Objective and alert creation, see `docs/ELASTIC_WORKFLOW_SETUP.md` which provides an Elastic Workflow to automatically create Service Level Objectives and alerts.
+
 ---
 
 ## Alert 1: High Error Rate

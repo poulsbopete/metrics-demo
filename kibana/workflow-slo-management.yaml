@@ -1,0 +1,359 @@
+name: Service Level Objective Management and Service Evaluation Workflow
+
+enabled: false
+
+description: |
+  Automatically evaluates all services from the metrics demo and creates/updates Service Level Objectives with relaxed targets.
+  Runs every 24 hours to maintain manageable violation counts.
+  Service Level Objective Targets: 
+    - Availability: 95%
+    - Error Rate: 95% (less than 5% errors)
+    - Latency: 85% of requests under 500ms (P95)
+  
+  IDEMPOTENT: Checks for existing Service Level Objectives by name before creating to prevent duplicates.
+  
+  This workflow uses metrics data from the demo services (frontend, api, worker).
+  Configure the Elastic endpoint and API key in the workflow variables or environment.
+
+triggers:
+  - type: scheduled
+    with:
+      every: "24h"
+  - type: manual
+
+variables:
+  - name: ELASTIC_ENDPOINT
+    type: string
+    default: "https://your-endpoint.kb.us-east-1.aws.elastic.cloud"
+    description: "Your Elastic Cloud Kibana endpoint (without /api path)"
+  
+  - name: ELASTIC_API_KEY
+    type: string
+    default: "your-api-key-here"
+    description: "Elastic API key with Service Level Objective management privileges"
+
+steps:
+  - name: workflow-start
+    type: console
+    with:
+      message: |
+        ================================================
+        Service Level Objective Management Workflow - Starting
+        ================================================
+
+        Execution ID: {{ execution.id }}
+        Timestamp: {{ now | date: '%Y-%m-%d %H:%M:%S UTC' }}
+
+        This workflow will:
+        1. Check for existing Service Level Objectives by name
+        2. Discover all services from metrics data
+        3. Evaluate service health metrics
+        4. Create Service Level Objectives only if they don't already exist (idempotent)
+
+        Services to monitor: frontend, api, worker
+
+        ================================================
+
+  - name: get-all-existing-slos
+    type: http
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/observability/slos?perPage=100'
+      method: GET
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+        kbn-xsrf: true
+
+  - name: log-existing-slos-status
+    type: console
+    if: '{{ steps.get-all-existing-slos.output.status == 200 }}'
+    with:
+      message: |
+        ================================================
+        Existing Service Level Objectives Check
+        ================================================
+
+        Total Service Level Objectives found: {{ steps.get-all-existing-slos.output.body.total | default: 0 }}
+
+        Checking for Service Level Objectives with names:
+        - "Metrics Demo - Availability"
+        - "Metrics Demo - Latency"
+        - "Metrics Demo - Error Rate"
+
+        Service Level Objectives will only be created if they don't already exist (idempotent).
+
+        ================================================
+
+  - name: discover-services
+    type: http
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/agent_builder/mcp'
+      method: POST
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+      body:
+        jsonrpc: "2.0"
+        id: discover-services
+        method: tools/call
+        params:
+          name: platform_core_execute_esql
+          arguments:
+            query: |
+              FROM metrics-generic.otel-default
+              | WHERE @timestamp > NOW() - 7d 
+                AND service.name IS NOT NULL
+              | STATS service_count = COUNT(*) BY service.name
+              | SORT service.name ASC
+              | LIMIT 100
+
+  - name: evaluate-service-metrics
+    type: http
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/agent_builder/mcp'
+      method: POST
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+      body:
+        jsonrpc: "2.0"
+        id: evaluate-service-metrics
+        method: tools/call
+        params:
+          name: platform_core_execute_esql
+          arguments:
+            query: |
+              FROM metrics-generic.otel-default
+              | WHERE @timestamp > NOW() - 24h 
+                AND service.name IN ("frontend", "api", "worker")
+              | STATS 
+                  total_requests = COUNT(),
+                  error_count = COUNT() FILTER(
+                    attributes.status_code LIKE "4*" OR 
+                    attributes.status_code LIKE "5*"
+                  )
+              BY service.name
+              | EVAL error_rate = (error_count / total_requests) * 100
+              | SORT service.name ASC
+
+  - name: debug-service-discovery
+    type: console
+    with:
+      message: |
+        ================================================
+        Service Discovery Results
+        ================================================
+
+        Services Found: {{ steps.discover-services.output.body | json | default: "No services found" }}
+
+        Service Metrics: {{ steps.evaluate-service-metrics.output.body | json | default: "No metrics found" }}
+
+        Response Status: {{ steps.discover-services.output.status | default: "N/A" }}
+
+        ================================================
+
+  - name: check-slo-exists-availability
+    type: set_variable
+    with:
+      variables:
+        slo_exists_availability: |
+          {% if steps.get-all-existing-slos.output.status == 200 %}
+            {% assign slos = steps.get-all-existing-slos.output.body.results | default: [] %}
+            {% for slo in slos %}
+              {% if slo.name == "Metrics Demo - Availability" %}
+                true
+                {% break %}
+              {% endif %}
+            {% endfor %}
+            false
+          {% else %}
+            false
+          {% endif %}
+
+  - name: create-slo-availability
+    type: http
+    if: '{{ vars.slo_exists_availability == false }}'
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/observability/slos'
+      method: POST
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+        kbn-xsrf: true
+      body: |
+        {
+          "name": "Metrics Demo - Availability",
+          "description": "Automatically created Service Level Objective for service availability - 95% target, grouped by service name. Based on metrics from the firehose-to-shaped demo.",
+          "indicator": {
+            "type": "sli.kql.custom",
+            "params": {
+              "index": "metrics-generic.otel-default",
+              "filter": "service.name: (\"frontend\" OR \"api\" OR \"worker\") AND metrics.http_request_total:*",
+              "good": "NOT (attributes.status_code LIKE \"4*\" OR attributes.status_code LIKE \"5*\")",
+              "total": "*",
+              "timestampField": "@timestamp"
+            }
+          },
+          "groupBy": "service.name",
+          "budgetingMethod": "occurrences",
+          "timeWindow": {
+            "duration": "30d",
+            "type": "rolling"
+          },
+          "objective": {
+            "target": 0.95
+          },
+          "tags": ["metrics-demo", "automated"]
+        }
+
+  - name: check-slo-exists-latency
+    type: set_variable
+    with:
+      variables:
+        slo_exists_latency: |
+          {% if steps.get-all-existing-slos.output.status == 200 %}
+            {% assign slos = steps.get-all-existing-slos.output.body.results | default: [] %}
+            {% for slo in slos %}
+              {% if slo.name == "Metrics Demo - Latency" %}
+                true
+                {% break %}
+              {% endif %}
+            {% endfor %}
+            false
+          {% else %}
+            false
+          {% endif %}
+
+  - name: create-slo-latency
+    type: http
+    if: '{{ vars.slo_exists_latency == false }}'
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/observability/slos'
+      method: POST
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+        kbn-xsrf: true
+      body: |
+        {
+          "name": "Metrics Demo - Latency",
+          "description": "Automatically created Service Level Objective for service latency - 85% of requests < 500ms target, grouped by service name. Based on metrics from the firehose-to-shaped demo.",
+          "indicator": {
+            "type": "sli.kql.custom",
+            "params": {
+              "index": "metrics-generic.otel-default",
+              "filter": "service.name: (\"frontend\" OR \"api\" OR \"worker\") AND metrics.http_request_total:*",
+              "good": "attributes.duration_ms:* AND attributes.duration_ms <= 500",
+              "total": "attributes.duration_ms:*",
+              "timestampField": "@timestamp"
+            }
+          },
+          "groupBy": "service.name",
+          "budgetingMethod": "occurrences",
+          "timeWindow": {
+            "duration": "30d",
+            "type": "rolling"
+          },
+          "objective": {
+            "target": 0.85
+          },
+          "tags": ["metrics-demo", "automated"]
+        }
+
+  - name: check-slo-exists-error-rate
+    type: set_variable
+    with:
+      variables:
+        slo_exists_error_rate: |
+          {% if steps.get-all-existing-slos.output.status == 200 %}
+            {% assign slos = steps.get-all-existing-slos.output.body.results | default: [] %}
+            {% for slo in slos %}
+              {% if slo.name == "Metrics Demo - Error Rate" %}
+                true
+                {% break %}
+              {% endif %}
+            {% endfor %}
+            false
+          {% else %}
+            false
+          {% endif %}
+
+  - name: create-slo-error-rate
+    type: http
+    if: '{{ vars.slo_exists_error_rate == false }}'
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/observability/slos'
+      method: POST
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+        kbn-xsrf: true
+      body: |
+        {
+          "name": "Metrics Demo - Error Rate",
+          "description": "Automatically created Service Level Objective for service error rate - < 5% errors target (95% success rate), grouped by service name. Based on metrics from the firehose-to-shaped demo.",
+          "indicator": {
+            "type": "sli.kql.custom",
+            "params": {
+              "index": "metrics-generic.otel-default",
+              "filter": "service.name: (\"frontend\" OR \"api\" OR \"worker\") AND metrics.http_request_total:*",
+              "good": "NOT (attributes.status_code LIKE \"4*\" OR attributes.status_code LIKE \"5*\")",
+              "total": "*",
+              "timestampField": "@timestamp"
+            }
+          },
+          "groupBy": "service.name",
+          "budgetingMethod": "occurrences",
+          "timeWindow": {
+            "duration": "30d",
+            "type": "rolling"
+          },
+          "objective": {
+            "target": 0.95
+          },
+          "tags": ["metrics-demo", "automated"]
+        }
+
+  - name: verify-slos-created
+    type: http
+    with:
+      url: '{{ vars.ELASTIC_ENDPOINT }}/api/observability/slos?perPage=100'
+      method: GET
+      headers:
+        Authorization: 'ApiKey {{ vars.ELASTIC_API_KEY }}'
+        Content-Type: application/json
+        Accept: application/json
+        kbn-xsrf: true
+
+  - name: final-status-report
+    type: console
+    with:
+      message: |
+        ================================================
+        Service Level Objective Management Workflow - Final Report
+        ================================================
+
+        Execution ID: {{ execution.id }}
+        Timestamp: {{ now | date: '%Y-%m-%d %H:%M:%S UTC' }}
+
+        Workflow Summary:
+        - Service Discovery: {{ steps.discover-services.output.status == 200 | default: false }}
+        - Service Metrics: {{ steps.evaluate-service-metrics.output.status == 200 | default: false }}
+        - Service Level Objective Status Check: {{ steps.get-all-existing-slos.output.status == 200 | default: false }}
+
+        Service Level Objective Creation Results:
+        - Availability: {{ steps.create-slo-availability.output.status | default: "Skipped (already exists)" }}
+        - Latency: {{ steps.create-slo-latency.output.status | default: "Skipped (already exists)" }}
+        - Error Rate: {{ steps.create-slo-error-rate.output.status | default: "Skipped (already exists)" }}
+
+        Current Service Level Objectives (after creation):
+        Total Service Level Objectives Found: {{ steps.verify-slos-created.output.body.total | default: 0 }}
+        Service Level Objective Names: {{ steps.verify-slos-created.output.body.results | map: "name" | join: ", " | default: "No Service Level Objectives found" }}
+
+        ================================================
