@@ -16,6 +16,14 @@ processors:
     timeout: 10s
     send_batch_size: 1024
 
+  # Add demo.mode resource attribute for easy filtering
+  transform/add_demo_mode:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["demo.mode"], "firehose")
+
   # Add basic Kubernetes attributes but don't remove anything
   k8sattributes:
     auth_type: serviceAccount
@@ -47,7 +55,7 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resource/add_demo_mode, k8sattributes, batch]
+      processors: [memory_limiter, transform/add_demo_mode, k8sattributes, batch]
       exporters: [otlphttp/elastic]
 
   extensions: [health_check]
