@@ -35,17 +35,17 @@ processors:
       - context: metric
         statements:
           # Normalize path attribute
-          - set(attributes["path"], replace_pattern(attributes["path"], "^/orders/\\d+", "/orders/{id}"))
-          - set(attributes["path"], replace_pattern(attributes["path"], "^/users/\\d+", "/users/{id}"))
-          - set(attributes["path"], replace_pattern(attributes["path"], "^/products/\\d+", "/products/{id}"))
+          - set(attributes["path"], ReplacePattern(attributes["path"], "^/orders/\\d+", "/orders/{id}"))
+          - set(attributes["path"], ReplacePattern(attributes["path"], "^/users/\\d+", "/users/{id}"))
+          - set(attributes["path"], ReplacePattern(attributes["path"], "^/products/\\d+", "/products/{id}"))
           # Ensure service.name is set consistently
-          - set(resource.attributes["service.name"], coalesce(resource.attributes["service.name"], attributes["service"]))
+          - set(resource.attributes["service.name"], Coalesce(resource.attributes["service.name"], attributes["service"]))
           # Set deployment.environment
-          - set(resource.attributes["deployment.environment"], coalesce(resource.attributes["deployment.environment"], "demo"))
+          - set(resource.attributes["deployment.environment"], Coalesce(resource.attributes["deployment.environment"], "demo"))
       - context: resource
         statements:
           # Set demo.mode for easy filtering
-          - set(resource.attributes["demo.mode"], "shaped")
+          - set(attributes["demo.mode"], "shaped")
 
   # Optional: Filter out noisy metrics that aren't useful
   # filter/noisy_metrics:

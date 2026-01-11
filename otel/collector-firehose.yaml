@@ -22,7 +22,7 @@ processors:
     metric_statements:
       - context: resource
         statements:
-          - set(resource.attributes["demo.mode"], "firehose")
+          - set(attributes["demo.mode"], "firehose")
 
   # Add basic Kubernetes attributes but don't remove anything
   k8sattributes:
