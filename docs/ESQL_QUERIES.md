@@ -275,7 +275,7 @@ FROM metrics-generic.otel-default
     count() AS metric_count,
     count_distinct(service.name) AS services_seen
   BY bucket(@timestamp, 30s)
-| SORT @timestamp DESC
+| SORT time_bucket DESC
 ```
 
 If `services_seen` is 3, all services are sending metrics!
