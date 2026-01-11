@@ -42,6 +42,8 @@ processors:
           - set(resource.attributes["service.name"], coalesce(resource.attributes["service.name"], attributes["service"]))
           # Set deployment.environment
           - set(resource.attributes["deployment.environment"], coalesce(resource.attributes["deployment.environment"], "demo"))
+          # Set demo.mode for easy filtering
+          - set(resource.attributes["demo.mode"], "shaped")
 
   # Optional: Filter out noisy metrics that aren't useful
   # filter/noisy_metrics:

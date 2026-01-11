@@ -47,7 +47,7 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, k8sattributes, batch]
+      processors: [memory_limiter, resource/add_demo_mode, k8sattributes, batch]
       exporters: [otlphttp/elastic]
 
   extensions: [health_check]
