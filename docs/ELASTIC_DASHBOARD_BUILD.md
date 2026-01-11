@@ -36,12 +36,12 @@ FROM metrics-generic.otel-default
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Line chart
-5. **X-axis:** `time_bucket`
-6. **Y-axis:** `request_count`
-7. **Split by:** `service.name` (color coding)
-8. **Y-axis label:** `Requests per Second`
-9. Click **Save and return**
+4. **Chart type:** Select **Line** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `time_bucket` in the field
+6. **Vertical axis (Y-axis):** Enter `request_count` in the field
+7. **Breakdown (Split by):** Enter `service.name` in the field. This will create separate lines for each service (frontend, api, worker) with different colors
+8. **Y-axis label (optional):** You can customize the label to "Requests per Second" if desired
+9. Click **Apply and close** to save the visualization
 
 ---
 
@@ -69,12 +69,12 @@ FROM metrics-generic.otel-default
 | EVAL error_rate = (errors / total_requests) * 100
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Line chart
-5. **X-axis:** `time_bucket`
-6. **Y-axis:** `error_rate` (percentage)
-7. **Split by:** `service.name`
-8. **Y-axis label:** `Error Rate (%)`
-9. Click **Save and return**
+4. **Chart type:** Select **Line** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `time_bucket` in the field
+6. **Vertical axis (Y-axis):** Enter `error_rate` in the field
+7. **Breakdown (Split by):** Enter `service.name` in the Breakdown field. This creates separate lines for each service with different colors
+8. **Y-axis label (optional):** You can customize the label to "Error Rate (%)" if desired
+9. Click **Apply and close** to save the visualization
 
 ---
 
@@ -97,12 +97,12 @@ FROM metrics-generic.otel-default
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Line chart
-5. **X-axis:** `time_bucket`
-6. **Y-axis:** `request_count`
-7. **Split by:** `service.name`
-8. **Y-axis label:** `Request Count (latency proxy)`
-9. Click **Save and return**
+4. **Chart type:** Select **Line** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `time_bucket` in the field
+6. **Vertical axis (Y-axis):** Enter `request_count` in the field
+7. **Breakdown (Split by):** Enter `service.name` in the Breakdown field. This creates separate lines for each service with different colors
+8. **Y-axis label (optional):** You can customize the label to "Request Count (latency proxy)" if desired
+9. Click **Apply and close** to save the visualization
 
 **Alternative (if histogram fields are available):**
 First, check what duration fields exist:
@@ -479,10 +479,10 @@ FROM metrics-generic.otel-default
     total = count()
   BY mode
 ```
-4. **Chart type:** Stacked bar chart
-5. **X-axis:** `mode`
-6. **Y-axis:** Stacked values (with_user_id, with_pod, with_build_id)
-7. Click **Save and return**
+4. **Chart type:** Select **Stacked bar** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `mode` in the field
+6. **Vertical axis (Y-axis):** Add multiple fields: `with_user_id`, `with_pod`, `with_build_id` (use "+ Add a field" button if needed)
+7. Click **Apply and close** to save the visualization
 
 **Expected:**
 - Firehose: All labels present
