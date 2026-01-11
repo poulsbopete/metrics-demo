@@ -26,23 +26,8 @@ This guide provides step-by-step instructions to build three dashboards for the 
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **Lens** visualization type
-3. Data view: `metrics-*` (or `metrics-generic.otel-default`)
-4. **Layer 1:**
-   - **Metric:** `Count of records`
-   - **Break down by:** `service.name` (Terms aggregation)
-   - **X-axis:** `@timestamp` (Date histogram, 1 minute interval)
-5. **Filters:**
-   - `service.name: ("frontend" OR "api" OR "worker")`
-   - `@timestamp >= now()-1h`
-6. **Chart type:** Line chart
-7. **Y-axis label:** `Requests per Second`
-8. Click **Save and return**
-
-**Alternative (ESQL-based):**
-If Lens doesn't support the aggregation, use **ES|QL**:
-1. Select **ES|QL** as data source
-2. Query:
+2. Select **ES|QL** as data source
+3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
@@ -51,10 +36,12 @@ FROM metrics-generic.otel-default
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
 ```
-3. Chart type: Line
-4. X-axis: `time_bucket`
-5. Y-axis: `request_count`
-6. Split by: `service.name`
+4. **Chart type:** Line chart
+5. **X-axis:** `time_bucket`
+6. **Y-axis:** `request_count`
+7. **Split by:** `service.name` (color coding)
+8. **Y-axis label:** `Requests per Second`
+9. Click **Save and return**
 
 ---
 
@@ -64,7 +51,7 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **Lens** or **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
@@ -193,13 +180,13 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND attributes.user_id IS NOT NULL
+  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
 | STATS user_count = count() BY attributes.user_id
 | SORT user_count DESC
 | LIMIT 20
@@ -219,14 +206,14 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
-  AND attributes.user_id IS NOT NULL
+  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
 | STATS path_count = count() BY attributes.path
 | SORT path_count DESC
 | LIMIT 20
@@ -246,14 +233,14 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
-  AND attributes.user_id IS NULL
+  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
 | STATS path_count = count() BY attributes.path
 | SORT path_count DESC
 | LIMIT 20
@@ -273,13 +260,13 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query (Firehose):**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND attributes.user_id IS NOT NULL
+  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
 | STATS count()
   BY attributes.user_id, attributes.path, attributes.pod
 | STATS unique_combinations = count()
@@ -294,7 +281,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND attributes.user_id IS NULL
+  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
 | STATS count()
   BY attributes.path
 | STATS unique_combinations = count()
@@ -313,7 +300,7 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **Data Table**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
@@ -326,8 +313,9 @@ FROM metrics-generic.otel-default
     has_path = count() FILTER(attributes.path IS NOT NULL),
     total = count()
 ```
-4. **Columns:** Show all fields
-5. Click **Save and return**
+4. **Chart type:** Data Table
+5. **Columns:** Show all fields (has_user_id, has_pod, has_build_id, has_path, total)
+6. Click **Save and return**
 
 **Expected (Firehose):** All counts > 0  
 **Expected (Shaped):** `has_user_id = 0`, `has_pod = 0`, `has_build_id = 0`
@@ -369,24 +357,30 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
-| EVAL mode = CASE(attributes.user_id IS NOT NULL, "firehose", "shaped")
+| EVAL mode = CASE(
+    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    "firehose", 
+    "shaped"
+  )
 | STATS request_count = count()
   BY mode, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Line chart (dual Y-axis or stacked)
+4. **Chart type:** Line chart
 5. **X-axis:** `time_bucket`
 6. **Y-axis:** `request_count`
 7. **Split by:** `mode` (color coding)
 8. Click **Save and return**
 
 **Expected:** Two lines (firehose and shaped) with similar request counts
+
+**Note:** Uses `resource.attributes.demo.mode` if available, otherwise falls back to checking for `attributes.user_id` presence.
 
 ---
 
@@ -396,14 +390,18 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
-| EVAL mode = CASE(attributes.user_id IS NOT NULL, "firehose", "shaped")
+| EVAL mode = CASE(
+    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    "firehose", 
+    "shaped"
+  )
 | STATS unique_paths = count_distinct(attributes.path)
   BY mode, time_bucket = bucket(@timestamp, 5m)
 | SORT time_bucket DESC
@@ -426,13 +424,17 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
+2. Select **ES|QL** as data source
 3. **ES|QL Query:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
-| EVAL mode = CASE(attributes.user_id IS NOT NULL, "firehose", "shaped")
+| EVAL mode = CASE(
+    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    "firehose", 
+    "shaped"
+  )
 | STATS 
     with_user_id = count() FILTER(attributes.user_id IS NOT NULL),
     with_pod = count() FILTER(attributes.pod IS NOT NULL),
@@ -457,28 +459,29 @@ FROM metrics-generic.otel-default
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **Metric** (single number)
+2. Select **ES|QL** as data source
 3. **ES|QL Query (Firehose):**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND @timestamp < NOW() - 15m
   AND service.name == "frontend"
-  AND attributes.user_id IS NOT NULL
+  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
 | STATS count()
   BY attributes.user_id, attributes.path, attributes.pod
 | STATS firehose_series = count()
 ```
-4. **Value:** `firehose_series`
-5. **Label:** `Firehose: Unique Series`
-6. Click **Save and return**
+4. **Chart type:** Metric (single number)
+5. **Value:** `firehose_series`
+6. **Label:** `Firehose: Unique Series`
+7. Click **Save and return**
 
 **Repeat for Shaped:**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND attributes.user_id IS NULL
+  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
 | STATS count()
   BY attributes.path
 | STATS shaped_series = count()
@@ -489,7 +492,11 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
-| EVAL mode = CASE(attributes.user_id IS NOT NULL, "firehose", "shaped")
+| EVAL mode = CASE(
+    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    "firehose", 
+    "shaped"
+  )
 | STATS count()
   BY mode, attributes.user_id, attributes.path, attributes.pod
 | STATS series_count = count() BY mode
@@ -574,10 +581,12 @@ FROM metrics-generic.otel-default
 
 ### ES|QL Queries Failing
 
-**Fallback:**
-- Use Lens with KQL filters
-- Use Discover aggregations
+**Troubleshooting:**
+- Check field names in Discover (field names may differ)
+- Verify time range has data
 - Simplify query (remove complex aggregations)
+- Check for syntax errors (missing pipes, incorrect function names)
+- Verify data view/index pattern is correct
 
 ### Missing Fields
 
