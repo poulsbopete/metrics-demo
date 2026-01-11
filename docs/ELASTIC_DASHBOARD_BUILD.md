@@ -214,7 +214,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
+  AND attributes.user_id IS NOT NULL
 | STATS user_count = count() BY attributes.user_id
 | SORT user_count DESC
 | LIMIT 20
@@ -241,7 +241,7 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
-  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
+  AND attributes.user_id IS NOT NULL
 | STATS path_count = count() BY attributes.path
 | SORT path_count DESC
 | LIMIT 20
@@ -268,7 +268,7 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
-  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
+  AND attributes.user_id IS NULL
 | STATS path_count = count() BY attributes.path
 | SORT path_count DESC
 | LIMIT 20
@@ -294,7 +294,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
+  AND attributes.user_id IS NOT NULL
 | STATS count()
   BY attributes.user_id, attributes.path, attributes.pod
 | STATS unique_combinations = count()
@@ -309,7 +309,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
+  AND attributes.user_id IS NULL
 | STATS count()
   BY attributes.path
 | STATS unique_combinations = count()
@@ -397,7 +397,7 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
 | EVAL mode = CASE(
-    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    attributes.user_id IS NOT NULL, 
     "firehose", 
     "shaped"
   )
@@ -413,7 +413,7 @@ FROM metrics-generic.otel-default
 
 **Expected:** Two lines (firehose and shaped) with similar request counts
 
-**Note:** Uses `resource.attributes.demo.mode` if available, otherwise falls back to checking for `attributes.user_id` presence.
+**Note:** Determines mode by checking for `attributes.user_id` presence (firehose mode has user_id, shaped mode does not).
 
 ---
 
@@ -431,7 +431,7 @@ FROM metrics-generic.otel-default
   AND service.name == "frontend"
   AND attributes.path IS NOT NULL
 | EVAL mode = CASE(
-    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    attributes.user_id IS NOT NULL, 
     "firehose", 
     "shaped"
   )
@@ -465,7 +465,7 @@ FROM metrics-generic.otel-default
   AND service.name == "frontend"
 | EVAL 
     mode = CASE(
-      resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+      attributes.user_id IS NOT NULL, 
       "firehose", 
       "shaped"
     ),
@@ -503,7 +503,7 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND @timestamp < NOW() - 15m
   AND service.name == "frontend"
-  AND (resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL)
+  AND attributes.user_id IS NOT NULL
 | STATS count()
   BY attributes.user_id, attributes.path, attributes.pod
 | STATS firehose_series = count()
@@ -518,7 +518,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
   AND service.name == "frontend"
-  AND (resource.attributes.demo.mode == "shaped" OR attributes.user_id IS NULL)
+  AND attributes.user_id IS NULL
 | STATS count()
   BY attributes.path
 | STATS shaped_series = count()
@@ -530,7 +530,7 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
   AND service.name == "frontend"
 | EVAL mode = CASE(
-    resource.attributes.demo.mode == "firehose" OR attributes.user_id IS NOT NULL, 
+    attributes.user_id IS NOT NULL, 
     "firehose", 
     "shaped"
   )
