@@ -62,7 +62,10 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
-  AND attributes.http.response.status_code >= 400
+  AND (attributes.http.response.status_code LIKE "4*" 
+       OR attributes.http.response.status_code LIKE "5*"
+       OR attributes.status_code LIKE "4*"
+       OR attributes.status_code LIKE "5*")
 | STATS error_count = count() 
   BY service.name, time_bucket = bucket(@timestamp, 1m)
 | SORT time_bucket DESC
