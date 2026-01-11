@@ -280,12 +280,26 @@ FROM metrics-generic.otel-default
 | SORT path_count DESC
 | LIMIT 20
 ```
-4. **Chart type:** Bar chart (horizontal)
-5. **X-axis:** `path_count`
-6. **Y-axis:** `attributes.path`
-7. Click **Save and return**
+4. **Chart type:** Select **Bar** from the chart type dropdown
+5. **Horizontal axis (X-axis):** Enter `attributes.path` (the categories - paths as strings)
+6. **Vertical axis (Y-axis):** Enter `path_count` (the numeric values - counts)
+7. Click **Apply and close** to save the visualization
 
 **Expected:** 5-10 normalized paths (e.g., `/orders/{id}`, `/users/{id}`)
+
+**Troubleshooting "No results found":**
+- **Check if demo is in shaped mode:** The query filters for `attributes.user_id IS NULL` (shaped mode). If you're still in firehose mode, you'll get no results.
+- **Switch to shaped mode first:** Run `./scripts/switch-mode.sh shaped` and wait 1-2 minutes for new metrics to flow
+- **Check time range:** Try a longer time range (e.g., `NOW() - 1h`) to see if there's any shaped mode data
+- **Verify data exists:** First run this diagnostic query:
+  ```esql
+  FROM metrics-generic.otel-default
+  | WHERE @timestamp >= NOW() - 1h
+    AND service.name == "frontend"
+    AND attributes.user_id IS NULL
+  | LIMIT 10
+  ```
+  If this returns results, your shaped mode is working. If not, switch to shaped mode and wait a few minutes.
 
 ---
 
