@@ -79,6 +79,10 @@ exporters:
     # Optional: set dataset for routing
     # dataset: ${ELASTIC_DATASET}
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 service:
   pipelines:
     metrics:
@@ -86,4 +90,4 @@ service:
       processors: [memory_limiter, attributes/delete, transform/path_normalize, k8sattributes, batch]
       exporters: [otlphttp/elastic]
 
-  extensions: []
+  extensions: [health_check]
