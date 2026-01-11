@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: elastic-metrics-demo
+data:
+  collector.yaml: |
+    # This will be replaced by deploy.sh script based on DEMO_MODE

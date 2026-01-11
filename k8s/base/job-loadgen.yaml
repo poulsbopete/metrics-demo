@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadgen
+  namespace: elastic-metrics-demo
+  labels:
+    app: loadgen
+spec:
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: k6
+        image: grafana/k6:latest
+        command:
+        - k6
+        - run
+        - /scripts/k6-script.js
+        env:
+        - name: FRONTEND_URL
+          value: "http://frontend:8080"
+        volumeMounts:
+        - name: k6-scripts
+          mountPath: /scripts
+      volumes:
+      - name: k6-scripts
+        configMap:
+          name: loadgen-script
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadgen-script
+  namespace: elastic-metrics-demo
+data:
+  k6-script.js: |
+    # This will be replaced by deploy.sh script

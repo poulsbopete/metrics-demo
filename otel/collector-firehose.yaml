@@ -1,0 +1,57 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    limit_mib: 256
+    check_interval: 1s
+    spike_limit_mib: 128
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Add basic Kubernetes attributes but don't remove anything
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: true
+    extract:
+      metadata:
+        - podName
+        - podUID
+        - containerName
+      labels:
+        - tag_name: k8s.pod.label.app
+          key: app
+          from: pod
+        - tag_name: k8s.namespace.name
+          key: namespace
+          from: pod
+      annotations:
+        - tag_name: k8s.pod.annotation.prometheus.io/scrape
+          key: prometheus.io/scrape
+          from: pod
+
+exporters:
+  otlphttp/elastic:
+    endpoint: ${ELASTIC_OTLP_ENDPOINT}
+    headers:
+      Authorization: "ApiKey ${ELASTIC_API_KEY}"
+    tls:
+      insecure: false
+    # Optional: set dataset for routing
+    # dataset: ${ELASTIC_DATASET}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, batch]
+      exporters: [otlphttp/elastic]
+
+  extensions: []

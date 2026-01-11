@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: elastic-metrics-demo
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.102.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - "/otelcol-contrib"
+        - "--config=/etc/otel-collector-config/collector.yaml"
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+        - containerPort: 4318
+          name: otlp-http
+        env:
+        - name: ELASTIC_OTLP_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: elastic-otlp-secret
+              key: ELASTIC_OTLP_ENDPOINT
+        - name: ELASTIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: elastic-otlp-secret
+              key: ELASTIC_API_KEY
+        - name: ELASTIC_DATASET
+          valueFrom:
+            secretKeyRef:
+              name: elastic-otlp-secret
+              key: ELASTIC_DATASET
+        volumeMounts:
+        - name: otel-collector-config
+          mountPath: /etc/otel-collector-config
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: otel-collector-config
+        configMap:
+          name: otel-collector-config

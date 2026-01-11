@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+  namespace: elastic-metrics-demo
+data:
+  DEMO_MODE: "firehose"

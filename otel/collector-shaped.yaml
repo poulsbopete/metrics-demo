@@ -1,0 +1,92 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    limit_mib: 256
+    check_interval: 1s
+    spike_limit_mib: 128
+
+  # Remove high-cardinality labels
+  attributes/delete:
+    actions:
+      - key: user_id
+        action: delete
+      - key: pod
+        action: delete
+      - key: container
+        action: delete
+      - key: instance
+        action: delete
+      - key: build_id
+        action: delete
+      - key: git_sha
+        action: delete
+
+  # Normalize path labels (replace /orders/12345 with /orders/{id})
+  transform/path_normalize:
+    error_mode: ignore
+    metric_statements:
+      - context: metric
+        statements:
+          # Normalize path attribute
+          - set(attributes["path"], replace_pattern(attributes["path"], "^/orders/\\d+", "/orders/{id}"))
+          - set(attributes["path"], replace_pattern(attributes["path"], "^/users/\\d+", "/users/{id}"))
+          - set(attributes["path"], replace_pattern(attributes["path"], "^/products/\\d+", "/products/{id}"))
+          # Ensure service.name is set consistently
+          - set(resource.attributes["service.name"], coalesce(resource.attributes["service.name"], attributes["service"]))
+          # Set deployment.environment
+          - set(resource.attributes["deployment.environment"], coalesce(resource.attributes["deployment.environment"], "demo"))
+
+  # Optional: Filter out noisy metrics that aren't useful
+  # filter/noisy_metrics:
+  #   metrics:
+  #     exclude:
+  #       match_type: regexp
+  #       metric_names:
+  #         - "^go_.*"
+  #         - "^process_.*"
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Add Kubernetes attributes (but we've already removed pod/container)
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: true
+    extract:
+      metadata:
+        - podName
+        - podUID
+      labels:
+        - tag_name: k8s.pod.label.app
+          key: app
+          from: pod
+        - tag_name: k8s.namespace.name
+          key: namespace
+          from: pod
+
+exporters:
+  otlphttp/elastic:
+    endpoint: ${ELASTIC_OTLP_ENDPOINT}
+    headers:
+      Authorization: "ApiKey ${ELASTIC_API_KEY}"
+    tls:
+      insecure: false
+    # Optional: set dataset for routing
+    # dataset: ${ELASTIC_DATASET}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/delete, transform/path_normalize, k8sattributes, batch]
+      exporters: [otlphttp/elastic]
+
+  extensions: []

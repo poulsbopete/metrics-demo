@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: elastic-metrics-demo
+data:
+  collector.yaml: |
+    # This will be replaced by kustomize based on DEMO_MODE
+    # Default is firehose config

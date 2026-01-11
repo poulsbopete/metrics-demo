@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: elastic-metrics-demo
+
+resources:
+  - namespace.yaml
+  - configmap-otel.yaml
+  - configmap-demo.yaml
+  - secret-elastic.yaml
+  - serviceaccount-otel-collector.yaml
+  - deployment-frontend.yaml
+  - deployment-api.yaml
+  - deployment-worker.yaml
+  - deployment-otel-collector.yaml
+  - service-frontend.yaml
+  - service-api.yaml
+  - service-worker.yaml
+  - service-otel-collector.yaml
+  - job-loadgen.yaml
+  - job-loadgen.yaml
