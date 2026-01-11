@@ -82,33 +82,56 @@ FROM metrics-generic.otel-default
 
 **Panel Title:** `P95 Latency (ms)`
 
-**Note:** If histogram metrics are not available, use request duration samples or skip this panel.
+**Note:** OpenTelemetry histograms are exported as multiple time series. The actual field names may vary. This query provides a working fallback and instructions for finding the correct fields.
 
 **Steps:**
 1. Click **Add visualization**
-2. Select **ES|QL**
-3. **ES|QL Query:**
+2. Select **ES|QL** as data source
+3. **ES|QL Query (fallback - request count as proxy):**
+```esql
+FROM metrics-generic.otel-default
+| WHERE @timestamp >= NOW() - 1h
+  AND service.name IN ("frontend", "api", "worker")
+| STATS 
+    request_count = count()
+  BY service.name, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
+```
+4. **Chart type:** Line chart
+5. **X-axis:** `time_bucket`
+6. **Y-axis:** `request_count`
+7. **Split by:** `service.name`
+8. **Y-axis label:** `Request Count (latency proxy)`
+9. Click **Save and return**
+
+**Alternative (if histogram fields are available):**
+First, check what duration fields exist:
+```esql
+FROM metrics-generic.otel-default
+| WHERE @timestamp >= NOW() - 1h
+  AND service.name IN ("frontend", "api", "worker")
+| LIMIT 1
+```
+Then inspect the `metrics.*` fields. If you find fields like:
+- `metrics.http_request_duration_seconds_sum`
+- `metrics.http_request_duration_seconds_count`
+
+You can calculate average latency:
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
   AND metrics.http_request_duration_seconds_sum IS NOT NULL
+  AND metrics.http_request_duration_seconds_count IS NOT NULL
+| EVAL avg_latency_seconds = metrics.http_request_duration_seconds_sum / metrics.http_request_duration_seconds_count
 | STATS 
-    p95_latency = percentile(metrics.http_request_duration_seconds_sum, 95)
+    avg_latency = avg(avg_latency_seconds)
   BY service.name, time_bucket = bucket(@timestamp, 1m)
-| EVAL p95_ms = p95_latency * 1000
+| EVAL avg_latency_ms = avg_latency * 1000
 | SORT time_bucket DESC
 ```
-4. **Chart type:** Line chart
-5. **X-axis:** `time_bucket`
-6. **Y-axis:** `p95_ms` (milliseconds)
-7. **Split by:** `service.name`
-8. **Y-axis label:** `P95 Latency (ms)`
-9. Click **Save and return**
 
-**Fallback (if histogram not available):**
-- Use average request duration or remove this panel
-- Or show "Latency metrics require histogram support"
+**Note:** P95 latency requires histogram bucket data which may not be directly queryable. Use average latency as shown above, or remove this panel if duration metrics are not available.
 
 ---
 
