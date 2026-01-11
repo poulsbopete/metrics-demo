@@ -332,11 +332,22 @@ app.get('/demo', (req, res) => {
     }
 
     async function generateTraffic() {
-      for (let i = 0; i < 10; i++) {
-        fetch('/api/call', { method: 'GET' });
+      const bombActive = ${bombMode || cardinalityBombMode ? 'true' : 'false'};
+      const count = bombActive ? 10 : 10;
+      
+      for (let i = 0; i < count; i++) {
+        if (bombActive) {
+          // Generate traffic with path IDs for cardinality bomb
+          const paths = ['/orders/', '/users/', '/products/'];
+          const randomPath = paths[Math.floor(Math.random() * paths.length)];
+          const randomId = Math.floor(Math.random() * 10000);
+          fetch(randomPath + randomId, { method: 'GET' });
+        } else {
+          fetch('/api/call', { method: 'GET' });
+        }
         await new Promise(r => setTimeout(r, 100));
       }
-      alert('Generated 10 requests!');
+      alert(\`Generated \${count} requests\${bombActive ? ' with path IDs (cardinality bomb active!)' : ''}!\`);
     }
 
     // Update gold metrics every 2 seconds
@@ -376,6 +387,31 @@ app.get('/api/call', async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// Route with path ID for cardinality bomb demo
+app.get('/orders/:id', (req, res) => {
+  res.json({ 
+    order: req.params.id,
+    status: 'processing',
+    message: 'Order endpoint - path_id will be extracted for cardinality bomb'
+  });
+});
+
+app.get('/users/:id', (req, res) => {
+  res.json({ 
+    user: req.params.id,
+    status: 'active',
+    message: 'User endpoint - path_id will be extracted for cardinality bomb'
+  });
+});
+
+app.get('/products/:id', (req, res) => {
+  res.json({ 
+    product: req.params.id,
+    status: 'available',
+    message: 'Product endpoint - path_id will be extracted for cardinality bomb'
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
