@@ -15,8 +15,8 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
-| STATS count() BY service.name
-| SORT count() DESC
+| STATS metric_count = count() BY service.name
+| SORT metric_count DESC
 | LIMIT 20
 ```
 
@@ -32,8 +32,8 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
-| STATS count() BY resource.attributes.service.name
-| SORT count() DESC
+| STATS metric_count = count() BY resource.attributes.service.name
+| SORT metric_count DESC
 | LIMIT 20
 ```
 
@@ -41,8 +41,8 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
-| STATS count() BY bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS count() BY time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ## Request Rate Metrics
@@ -91,7 +91,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
-| STATS count() AS time_series_count 
+| STATS time_series_count = count() 
   BY service.name, 
      attributes.http.request.method, 
      attributes.http.response.status_code, 
@@ -105,7 +105,7 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND attributes.user_id IS NOT NULL
-| STATS count() AS time_series_count 
+| STATS time_series_count = count() 
   BY service.name, attributes.user_id, attributes.path
 | SORT time_series_count DESC
 | LIMIT 50
@@ -116,13 +116,13 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
-| STATS count() AS total_metrics 
+| STATS total_metrics = count() 
   BY service.name, 
      attributes.http.request.method,
      attributes.http.response.status_code,
      attributes.path,
      attributes.user_id
-| STATS count_distinct = count() AS unique_series 
+| STATS unique_series = count() 
   BY service.name
 ```
 
@@ -158,8 +158,8 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h 
   AND service.name IN ("frontend", "api", "worker")
   AND attributes.path IS NOT NULL
-| STATS count() BY attributes.path
-| SORT count() DESC
+| STATS path_count = count() BY attributes.path
+| SORT path_count DESC
 | LIMIT 20
 ```
 
@@ -173,19 +173,19 @@ FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
 | STATS 
-    count() AS total_metrics,
-    count_distinct(service.name) AS unique_services
-  BY bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+    total_metrics = count(),
+    unique_services = count_distinct(service.name)
+  BY time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ### Metrics by Deployment (Kubernetes)
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
-| STATS count() 
+| STATS deployment_count = count() 
   BY resource.attributes.k8s.deployment.name
-| SORT count() DESC
+| SORT deployment_count DESC
 | LIMIT 20
 ```
 
@@ -195,8 +195,8 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
-| STATS count() BY data_stream.dataset, bucket(@timestamp, 1m)
-| SORT @timestamp DESC
+| STATS count() BY data_stream.dataset, time_bucket = bucket(@timestamp, 1m)
+| SORT time_bucket DESC
 ```
 
 ### Check for Demo Services
@@ -217,8 +217,8 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
-| STATS count() BY _metric_names_hash
-| SORT count() DESC
+| STATS metric_count = count() BY _metric_names_hash
+| SORT metric_count DESC
 | LIMIT 50
 ```
 
@@ -258,12 +258,9 @@ FROM metrics-generic.otel-default
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 1h
   AND service.name IN ("frontend", "api", "worker")
-| STATS count() AS series_count
-  BY service.name,
-     CASE 
-       WHEN attributes.user_id IS NOT NULL THEN "firehose"
-       ELSE "shaped"
-     END AS mode
+| EVAL mode = CASE(attributes.user_id IS NOT NULL, "firehose", "shaped")
+| STATS series_count = count()
+  BY service.name, mode
 | SORT series_count DESC
 ```
 
