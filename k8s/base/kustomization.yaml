@@ -17,5 +17,3 @@ resources:
   - service-api.yaml
   - service-worker.yaml
   - service-otel-collector.yaml
-  - job-loadgen.yaml
-  - job-loadgen.yaml

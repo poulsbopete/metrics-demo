@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: elastic-metrics-demo
 
-bases:
+resources:
   - ../../base
 
 patches:
