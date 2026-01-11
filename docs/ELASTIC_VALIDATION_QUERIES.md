@@ -342,15 +342,36 @@ FROM metrics-generic.otel-default
 
 ## Before/After Comparison
 
+### Using demo.mode Resource Attribute
+
+**Note:** The collector adds a `demo.mode` resource attribute (`firehose` or `shaped`) for easy filtering.
+
+**Filter by Mode (KQL):**
+```
+resource.attributes.demo.mode: firehose
+```
+or
+```
+resource.attributes.demo.mode: shaped
+```
+
+**Filter by Mode (ES|QL):**
+```esql
+FROM metrics-generic.otel-default
+| WHERE @timestamp >= NOW() - 30m
+  AND resource.attributes.demo.mode == "firehose"
+```
+
+---
+
 ### Side-by-Side Cardinality Comparison
 
 **Firehose Mode (Before):**
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 30m
-  AND @timestamp < NOW() - 15m
+  AND resource.attributes.demo.mode == "firehose"
   AND service.name == "frontend"
-  AND attributes.user_id IS NOT NULL
 | STATS firehose_series = count()
   BY attributes.user_id, attributes.path
 | STATS firehose_total = count()
@@ -359,7 +380,8 @@ FROM metrics-generic.otel-default
 **Shaped Mode (After):**
 ```esql
 FROM metrics-generic.otel-default
-| WHERE @timestamp >= NOW() - 15m
+| WHERE @timestamp >= NOW() - 30m
+  AND resource.attributes.demo.mode == "shaped"
   AND service.name == "frontend"
 | STATS shaped_series = count()
   BY attributes.path
@@ -380,8 +402,8 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
+  AND resource.attributes.demo.mode == "firehose"
   AND service.name == "frontend"
-  AND attributes.user_id IS NOT NULL
 | STATS count() 
   BY service.name,
      attributes.method,
@@ -397,6 +419,7 @@ FROM metrics-generic.otel-default
 ```esql
 FROM metrics-generic.otel-default
 | WHERE @timestamp >= NOW() - 15m
+  AND resource.attributes.demo.mode == "shaped"
   AND service.name == "frontend"
 | STATS count()
   BY service.name,
