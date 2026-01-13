@@ -261,15 +261,36 @@ else
     
     echo "✅ Docker verified and ready"
     
+    # Ensure Docker is in PATH and export it for the start-local script
+    DOCKER_PATH=$(command -v docker)
+    if [ -z "$DOCKER_PATH" ]; then
+        echo "❌ ERROR: Docker command not found in PATH"
+        exit 1
+    fi
+    echo "📍 Docker found at: $DOCKER_PATH"
+    
+    # Ensure PATH includes common Docker locations
+    export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+    if [ -d "/usr/local/bin" ]; then
+        export PATH="/usr/local/bin:$PATH"
+    fi
+    
+    # Verify Docker is accessible with full PATH
+    if ! command -v docker &> /dev/null; then
+        echo "❌ ERROR: Docker not accessible even with full PATH"
+        exit 1
+    fi
+    
     # Use Elastic's start-local script with version specification (start in background)
     # Note: This may fail if disk space is insufficient
+    # Export PATH and DOCKER_PATH to ensure start-local can find Docker
     if [ -n "$ELASTIC_VERSION" ] && [ "$ELASTIC_VERSION" != "latest" ]; then
         echo "📥 Installing Elastic stack version $ELASTIC_VERSION using start-local script (background)..."
-        curl -fsSL https://elastic.co/start-local | sh -s -- -v "$ELASTIC_VERSION" 2>&1 | tee -a "$SETUP_LOG" &
+        (export PATH="$PATH"; curl -fsSL https://elastic.co/start-local | sh -s -- -v "$ELASTIC_VERSION" 2>&1 | tee -a "$SETUP_LOG") &
         ELASTIC_PID=$!
     else
         echo "📥 Installing latest Elastic stack using start-local script (background)..."
-        curl -fsSL https://elastic.co/start-local | sh 2>&1 | tee -a "$SETUP_LOG" &
+        (export PATH="$PATH"; curl -fsSL https://elastic.co/start-local | sh 2>&1 | tee -a "$SETUP_LOG") &
         ELASTIC_PID=$!
     fi
 fi
