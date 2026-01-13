@@ -1,0 +1,52 @@
+#!/bin/bash
+set -e
+
+echo "🧹 Cleaning up Elastic Metrics Demo..."
+
+# Stop and remove Kubernetes resources
+if kubectl get namespace elastic-metrics-demo > /dev/null 2>&1; then
+    echo "Removing Kubernetes resources..."
+    kubectl delete namespace elastic-metrics-demo --wait=false || true
+    echo "✅ Kubernetes resources removed"
+fi
+
+# Delete kind cluster (only if using kind, not K3s)
+if command -v kind &> /dev/null && kind get clusters | grep -q "^metrics-demo$"; then
+    echo "Deleting kind cluster..."
+    kind delete cluster --name metrics-demo || true
+    echo "✅ Kind cluster deleted"
+elif command -v k3s &> /dev/null; then
+    echo "✅ Using K3s - no need to delete cluster (managed by Instruqt)"
+fi
+
+# Stop Elastic stack
+if docker ps | grep -q elasticsearch; then
+    echo "Stopping Elastic stack..."
+    if [ -f "/tmp/docker-compose-elastic.yml" ]; then
+        if command -v docker-compose > /dev/null 2>&1; then
+            docker-compose -f /tmp/docker-compose-elastic.yml down -v 2>/dev/null || true
+        else
+            docker compose -f /tmp/docker-compose-elastic.yml down -v 2>/dev/null || true
+        fi
+    else
+        # Try to stop any running Elastic containers
+        docker stop $(docker ps -q --filter "name=elasticsearch") 2>/dev/null || true
+        docker stop $(docker ps -q --filter "name=kibana") 2>/dev/null || true
+    fi
+    echo "✅ Elastic stack stopped"
+fi
+
+# Clean up temporary files
+echo "Cleaning up temporary files..."
+rm -f /tmp/docker-compose-elastic.yml /tmp/kind-config.yaml 2>/dev/null || true
+rm -f /tmp/*-build.log 2>/dev/null || true
+
+# Optional: Clean up Docker images (commented out to keep them for faster restarts)
+# echo "Cleaning up Docker images..."
+# docker rmi frontend:latest api:latest worker:latest 2>/dev/null || true
+
+echo ""
+echo "✅ Cleanup complete!"
+echo ""
+echo "Note: Docker images and /opt/metrics-demo directory are preserved"
+echo "      for faster restarts. Remove manually if needed."

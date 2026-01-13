@@ -1,0 +1,47 @@
+#!/bin/bash
+# Helper script to check setup status and deploy if needed
+
+set -e
+
+echo "🔍 Checking setup status..."
+
+# Configure kubectl for K3s if needed
+if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ]; then
+    mkdir -p ~/.kube
+    if [ ! -f ~/.kube/config ] || ! kubectl cluster-info &> /dev/null; then
+        echo "📝 Configuring kubectl for K3s..."
+        cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+        chmod 600 ~/.kube/config
+        export KUBECONFIG=~/.kube/config
+        sed -i 's/127.0.0.1/localhost/g' ~/.kube/config || true
+    fi
+fi
+
+# Check if namespace exists
+if ! kubectl get namespace elastic-metrics-demo &> /dev/null; then
+    echo "❌ Namespace 'elastic-metrics-demo' does not exist"
+    echo "🚀 Deploying now..."
+    cd /opt/metrics-demo
+    export ELASTIC_OTLP_ENDPOINT="http://localhost:4318"
+    export ELASTIC_API_KEY=""
+    export ELASTIC_DATASET=${ELASTIC_DATASET:-metrics-demo}
+    export USE_LOCAL_ELASTIC="true"
+    export DEMO_MODE=${DEMO_MODE:-firehose}
+    ./scripts/deploy.sh
+    echo "✅ Deployment complete!"
+else
+    echo "✅ Namespace exists"
+fi
+
+# Check pods
+echo ""
+echo "📊 Pod status:"
+kubectl get pods -n elastic-metrics-demo
+
+echo ""
+echo "📝 To view logs:"
+echo "  kubectl logs -n elastic-metrics-demo -l app=frontend"
+echo "  kubectl logs -n elastic-metrics-demo -l app=api"
+echo ""
+echo "📝 To port-forward:"
+echo "  kubectl port-forward -n elastic-metrics-demo svc/frontend 3000:3000"

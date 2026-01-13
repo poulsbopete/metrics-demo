@@ -1,0 +1,336 @@
+#!/bin/bash
+set -e
+
+# Log file for setup progress
+SETUP_LOG="/tmp/setup.log"
+exec > >(tee -a "$SETUP_LOG") 2>&1
+
+echo "🚀 Setting up Elastic Metrics Demo (minimal setup for fast terminal access)..."
+echo "📝 Setup logs are being written to: $SETUP_LOG"
+echo "   You can view them with: tail -f $SETUP_LOG"
+
+# Install basic dependencies in parallel where possible
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential parallel > /dev/null 2>&1
+
+# Start Docker service (VM approach)
+if ! systemctl is-active --quiet docker; then
+    echo "Starting Docker service..."
+    systemctl start docker || service docker start || true
+    usermod -aG docker $USER || true
+    # Wait for Docker to be ready
+    for i in {1..30}; do
+        if docker info > /dev/null 2>&1; then
+            echo "✅ Docker is ready"
+            break
+        fi
+        sleep 1
+    done
+else
+    echo "✅ Docker service already running"
+    # Verify Docker is actually working
+    if ! docker info > /dev/null 2>&1; then
+        echo "⚠️  Docker service is running but not responding, restarting..."
+        systemctl restart docker || service docker restart || true
+    fi
+fi
+
+# Install kubectl and kind in parallel
+(
+    if ! command -v kubectl &> /dev/null; then
+        echo "Installing kubectl..."
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 2>/dev/null
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        rm -f kubectl
+    fi
+) &
+KUBECTL_PID=$!
+
+(
+    if ! command -v kind &> /dev/null; then
+        echo "Installing kind..."
+        curl -Lo /tmp/kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 2>/dev/null
+        chmod +x /tmp/kind
+        mv /tmp/kind /usr/local/bin/kind
+    fi
+) &
+KIND_PID=$!
+
+# Clone repository while tools install
+if [ ! -d "/opt/metrics-demo" ]; then
+    echo "📦 Cloning metrics-demo repository..."
+    git clone --depth 1 https://github.com/poulsbopete/metrics-demo.git /opt/metrics-demo || {
+        echo "⚠️  Repository clone failed, will use local files if available..."
+        mkdir -p /opt/metrics-demo
+    }
+fi
+
+# Wait for tool installations
+wait $KUBECTL_PID $KIND_PID
+
+cd /opt/metrics-demo
+
+# Get Elastic version from environment or use default
+ELASTIC_VERSION=${ELASTIC_VERSION:-"9.2.3"}
+echo "🔍 Starting local Elasticsearch and Kibana..."
+echo "📌 Requested version: $ELASTIC_VERSION"
+
+# Use Elastic's start-local script with version specification (start in background)
+if [ -n "$ELASTIC_VERSION" ] && [ "$ELASTIC_VERSION" != "latest" ]; then
+    echo "📥 Installing Elastic stack version $ELASTIC_VERSION using start-local script (background)..."
+    curl -fsSL https://elastic.co/start-local | sh -s -- -v "$ELASTIC_VERSION" &
+    ELASTIC_PID=$!
+else
+    echo "📥 Installing latest Elastic stack using start-local script (background)..."
+    curl -fsSL https://elastic.co/start-local | sh &
+    ELASTIC_PID=$!
+fi
+
+echo ""
+echo "✅ Minimal setup complete! Terminal is now available."
+echo "⏳ Continuing full setup in background..."
+echo "   Run 'tail -f /tmp/setup.log' to monitor progress"
+echo ""
+
+# Continue full setup in background
+(
+cd /opt/metrics-demo
+
+# Wait for Elastic stack to start
+echo "⏳ Waiting for Elastic stack to start..."
+wait $ELASTIC_PID 2>/dev/null || true
+
+# Wait for Elasticsearch to be ready
+echo "⏳ Waiting for Elasticsearch to be ready..."
+for i in {1..60}; do
+    if curl -s http://localhost:9200 > /dev/null 2>&1; then
+        echo "✅ Elasticsearch is ready"
+        break
+    fi
+    sleep 2
+done
+
+# Configure for local Elastic
+export ELASTIC_OTLP_ENDPOINT="http://localhost:4318"
+export ELASTIC_API_KEY=""
+export ELASTIC_DATASET=${ELASTIC_DATASET:-metrics-demo}
+export USE_LOCAL_ELASTIC="true"
+export DEMO_MODE=${DEMO_MODE:-firehose}
+
+# Create kind cluster with optimized config (single node, faster startup)
+if ! kind get clusters | grep -q "^metrics-demo$"; then
+    echo "🔧 Creating kind cluster..."
+    cat > /tmp/kind-config.yaml <<'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+EOF
+    kind create cluster --name metrics-demo --config /tmp/kind-config.yaml --wait 3m
+    echo "✅ Kind cluster created"
+else
+    echo "✅ Kind cluster already exists"
+fi
+
+# Clean up disk space before building
+echo "🧹 Cleaning up disk space..."
+df -h / | tail -1
+# Remove all unused Docker resources
+docker system prune -af --volumes > /dev/null 2>&1 || true
+# Remove build cache
+docker builder prune -af > /dev/null 2>&1 || true
+# Clean up apt cache
+apt-get clean > /dev/null 2>&1 || true
+rm -rf /var/lib/apt/lists/* > /dev/null 2>&1 || true
+# Clean up temporary files (but keep setup.log)
+find /tmp -mindepth 1 -maxdepth 1 ! -name 'setup.log' -exec rm -rf {} + > /dev/null 2>&1 || true
+rm -rf /var/tmp/* > /dev/null 2>&1 || true
+echo "✅ Disk cleanup complete"
+df -h / | tail -1
+
+# Build Docker images in parallel
+echo "🏗️  Building Docker images in parallel..."
+cd /opt/metrics-demo
+docker build -t frontend:latest ./services/frontend > /tmp/frontend-build.log 2>&1 &
+FRONTEND_PID=$!
+docker build -t api:latest ./services/api > /tmp/api-build.log 2>&1 &
+API_PID=$!
+docker build -t worker:latest ./services/worker > /tmp/worker-build.log 2>&1 &
+WORKER_PID=$!
+
+# Wait for all images to build and check for failures
+BUILD_FAILED=false
+BUILD_ERRORS=""
+
+# Check each build individually
+if wait $FRONTEND_PID; then
+    echo "✅ Frontend build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}frontend "
+    echo "❌ Frontend build failed (exit code: $?)"
+fi
+
+if wait $API_PID; then
+    echo "✅ API build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}api "
+    echo "❌ API build failed (exit code: $?)"
+fi
+
+if wait $WORKER_PID; then
+    echo "✅ Worker build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}worker "
+    echo "❌ Worker build failed (exit code: $?)"
+fi
+
+# If any build failed, show detailed logs
+if [ "$BUILD_FAILED" = true ]; then
+    echo ""
+    echo "❌ Docker build failures detected for: $BUILD_ERRORS"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    if [[ "$BUILD_ERRORS" == *"frontend"* ]]; then
+        echo "❌ Frontend build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/frontend-build.log || true
+        echo ""
+    fi
+    
+    if [[ "$BUILD_ERRORS" == *"api"* ]]; then
+        echo "❌ API build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/api-build.log || true
+        echo ""
+    fi
+    
+    if [[ "$BUILD_ERRORS" == *"worker"* ]]; then
+        echo "❌ Worker build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/worker-build.log || true
+        echo ""
+    fi
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ One or more Docker builds failed. Exiting."
+    exit 1
+fi
+
+echo "✅ All images built successfully"
+
+# Clean up disk space again before loading into kind
+echo "🧹 Cleaning up disk space before loading images into kind..."
+docker system prune -f > /dev/null 2>&1 || true
+# Remove unused build cache
+docker builder prune -af > /dev/null 2>&1 || true
+# Clean up any dangling images
+docker image prune -af > /dev/null 2>&1 || true
+df -h / | tail -1
+
+# Load images into kind in parallel
+echo "📤 Loading images into kind cluster..."
+kind load docker-image frontend:latest --name metrics-demo &
+kind load docker-image api:latest --name metrics-demo &
+kind load docker-image worker:latest --name metrics-demo &
+wait
+
+# Deploy the demo
+echo "🚀 Deploying metrics demo..."
+cd /opt/metrics-demo
+./scripts/deploy.sh
+
+# Wait for pods to be ready (with shorter timeout, non-blocking)
+echo "⏳ Waiting for pods to be ready..."
+kubectl wait --for=condition=ready pod -l app=frontend -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=api -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=worker -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=otel-collector -n elastic-metrics-demo --timeout=180s || true &
+wait
+
+echo ""
+echo "✅ Full setup complete!"
+echo ""
+echo "📊 Access the demo:"
+echo "  - Frontend: kubectl port-forward -n elastic-metrics-demo svc/frontend 3000:3000"
+echo "  - Kibana: http://localhost:5601"
+echo "  - Elasticsearch: http://localhost:9200"
+echo ""
+echo "📝 Next steps:"
+echo "  1. Wait 2-3 minutes for metrics to start flowing"
+echo "  2. Open Kibana and explore the metrics-generic.otel-default data view"
+echo "  3. Import dashboards from kibana/metrics-demo.ndjson"
+echo "  4. Switch between firehose and shaped modes: ./scripts/switch-mode.sh <mode>"
+) >> "$SETUP_LOG" 2>&1 &
+
+# Create helper scripts and configure bashrc (do this immediately so terminal has them)
+
+# Create a helper script to view logs
+cat > /usr/local/bin/view-setup-logs <<'EOF'
+#!/bin/bash
+if [ -f "/tmp/setup.log" ]; then
+    echo "📋 Setup Logs (last 50 lines):"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    tail -50 /tmp/setup.log
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time"
+else
+    echo "⚠️  Setup log not found at /tmp/setup.log"
+fi
+EOF
+chmod +x /usr/local/bin/view-setup-logs
+
+# Add to bashrc to automatically show logs when terminal opens
+if ! grep -q "view-setup-logs" /root/.bashrc 2>/dev/null; then
+    echo "" >> /root/.bashrc
+    echo "# Automatically show setup logs when terminal opens" >> /root/.bashrc
+    echo "if [ -f /tmp/setup.log ] && [ -z \"\$SETUP_LOGS_SHOWN\" ]; then" >> /root/.bashrc
+    echo "    export SETUP_LOGS_SHOWN=1" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "    echo \"📋 Setup Logs (last 50 lines):\"" >> /root/.bashrc
+    echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> /root/.bashrc
+    echo "    tail -50 /tmp/setup.log" >> /root/.bashrc
+    echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "    echo \"💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time\"" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "fi" >> /root/.bashrc
+fi
+
+# Also add for regular user if different
+if [ -f /home/*/.bashrc ]; then
+    for bashrc in /home/*/.bashrc; do
+        if ! grep -q "view-setup-logs" "$bashrc" 2>/dev/null; then
+            echo "" >> "$bashrc"
+            echo "# Automatically show setup logs when terminal opens" >> "$bashrc"
+            echo "if [ -f /tmp/setup.log ] && [ -z \"\$SETUP_LOGS_SHOWN\" ]; then" >> "$bashrc"
+            echo "    export SETUP_LOGS_SHOWN=1" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "    echo \"📋 Setup Logs (last 50 lines):\"" >> "$bashrc"
+            echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> "$bashrc"
+            echo "    tail -50 /tmp/setup.log" >> "$bashrc"
+            echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "    echo \"💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time\"" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "fi" >> "$bashrc"
+        fi
+    done
+fi

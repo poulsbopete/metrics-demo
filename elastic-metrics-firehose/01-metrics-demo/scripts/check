@@ -1,0 +1,57 @@
+#!/bin/bash
+set -e
+
+echo "🔍 Checking setup status..."
+
+# Check if Elasticsearch is running
+if curl -s http://localhost:9200 > /dev/null 2>&1; then
+    echo "✅ Elasticsearch is running"
+else
+    echo "❌ Elasticsearch is not running"
+    exit 1
+fi
+
+# Check if Kibana is running
+if curl -s http://localhost:5601/api/status > /dev/null 2>&1; then
+    echo "✅ Kibana is running"
+else
+    echo "❌ Kibana is not running"
+    exit 1
+fi
+
+# Check if Kubernetes cluster exists (K3s or kind)
+if command -v k3s &> /dev/null && kubectl cluster-info &> /dev/null; then
+    echo "✅ K3s Kubernetes cluster is running"
+elif kind get clusters | grep -q "^metrics-demo$"; then
+    echo "✅ Kind cluster exists"
+else
+    echo "❌ Kubernetes cluster does not exist"
+    exit 1
+fi
+
+# Check if pods are running
+PODS_READY=$(kubectl get pods -n elastic-metrics-demo --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+if [ "$PODS_READY" -ge 4 ]; then
+    echo "✅ Kubernetes pods are running ($PODS_READY pods)"
+else
+    echo "⚠️  Some pods may not be ready yet ($PODS_READY pods running)"
+fi
+
+# Check if metrics-demo directory exists
+if [ -d "/opt/metrics-demo" ]; then
+    echo "✅ Metrics demo repository exists"
+else
+    echo "❌ Metrics demo repository not found"
+    exit 1
+fi
+
+# Check if metrics are flowing (optional - may take time)
+METRICS_COUNT=$(curl -s "http://localhost:9200/metrics-generic.otel-default/_count" 2>/dev/null | grep -o '"value":[0-9]*' | cut -d: -f2 || echo "0")
+if [ "$METRICS_COUNT" -gt 0 ]; then
+    echo "✅ Metrics are flowing ($METRICS_COUNT documents in Elasticsearch)"
+else
+    echo "⚠️  No metrics found yet (may need to wait a few minutes)"
+fi
+
+echo ""
+echo "✅ All checks passed! The demo is ready to use."

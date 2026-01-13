@@ -65,16 +65,12 @@ processors:
           from: pod
 
 exporters:
-  # Use Elasticsearch HTTP exporter for local development
-  elasticsearch:
-    endpoints:
-      - http://host.docker.internal:9200
+  # Use OTLP HTTP exporter for local Elastic (which accepts OTLP/HTTP)
+  otlphttp/elastic:
+    endpoint: http://host.docker.internal:9200
     # No authentication needed for local Elastic
-    logs_index: metrics-generic
-    metrics_index: metrics-generic
-    flush:
-      bytes: 524288
-      interval: 10s
+    tls:
+      insecure: true
 
 extensions:
   health_check:
@@ -85,6 +81,6 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, transform/add_demo_mode, transform/remove_labels, k8sattributes, batch]
-      exporters: [elasticsearch]
+      exporters: [otlphttp/elastic]
 
   extensions: [health_check]

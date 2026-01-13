@@ -1,0 +1,16 @@
+version: "3"
+virtualmachines:
+- name: metrics-demo
+  image: instruqt/k3s-v1-33-4
+  shell: /bin/bash
+  environment:
+    DEMO_MODE: firehose
+    ELASTIC_DATASET: metrics-demo
+    USE_LOCAL_ELASTIC: "true"
+    ELASTIC_VERSION: "9.3.0-SNAPSHOT"
+  memory: 16384
+  cpus: 4
+  allow_external_ingress:
+  - http
+  - https
+  - high-ports

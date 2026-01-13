@@ -1,0 +1,599 @@
+#!/bin/bash
+set -e
+
+# Log file for setup progress
+SETUP_LOG="/tmp/setup.log"
+exec > >(tee -a "$SETUP_LOG") 2>&1
+
+echo "🚀 Setting up Elastic Metrics Demo (minimal setup for fast terminal access)..."
+echo "📝 Setup logs are being written to: $SETUP_LOG"
+echo "   You can view them with: tail -f $SETUP_LOG"
+
+# Install basic dependencies in parallel where possible
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq || true
+
+# Check if we're on a K3s image (which may have different package availability)
+if command -v k3s &> /dev/null; then
+    echo "✅ K3s detected - using K3s-compatible setup"
+    # K3s images may have Docker or containerd - install Docker if not present
+    if ! command -v docker &> /dev/null; then
+        echo "Installing Docker for K3s image..."
+        apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential || true
+    else
+        echo "✅ Docker already available"
+        apt-get install -y -qq curl wget git jq build-essential || true
+    fi
+else
+    # Standard Ubuntu VM - install everything
+    apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential parallel || true
+fi
+
+# Start Docker service (if Docker is installed)
+if command -v docker &> /dev/null; then
+    if ! systemctl is-active --quiet docker 2>/dev/null; then
+        echo "Starting Docker service..."
+        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+        usermod -aG docker $USER 2>/dev/null || true
+        # Wait for Docker to be ready
+        for i in {1..30}; do
+            if docker info > /dev/null 2>&1; then
+                echo "✅ Docker is ready"
+                break
+            fi
+            sleep 1
+        done
+    else
+        echo "✅ Docker service already running"
+        # Verify Docker is actually working
+        if ! docker info > /dev/null 2>&1; then
+            echo "⚠️  Docker service is running but not responding, restarting..."
+            systemctl restart docker 2>/dev/null || service docker restart 2>/dev/null || true
+        fi
+    fi
+else
+    echo "⚠️  Docker not installed - will use containerd/K3s for container management"
+fi
+
+# Install kubectl (K3s images may already have it, but install if missing)
+(
+    if ! command -v kubectl &> /dev/null; then
+        echo "Installing kubectl..."
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 2>/dev/null
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        rm -f kubectl
+    fi
+) &
+KUBECTL_PID=$!
+
+# Install kind only if K3s is not available (K3s images have Kubernetes pre-installed)
+(
+    if ! command -v k3s &> /dev/null; then
+        if ! command -v kind &> /dev/null; then
+            echo "Installing kind (K3s not detected)..."
+            curl -Lo /tmp/kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 2>/dev/null
+            chmod +x /tmp/kind
+            mv /tmp/kind /usr/local/bin/kind
+        fi
+    else
+        echo "✅ K3s detected - skipping kind installation"
+    fi
+) &
+KIND_PID=$!
+
+# Clone repository while tools install
+if [ ! -d "/opt/metrics-demo" ]; then
+    echo "📦 Cloning metrics-demo repository..."
+    git clone --depth 1 https://github.com/poulsbopete/metrics-demo.git /opt/metrics-demo || {
+        echo "⚠️  Repository clone failed, will use local files if available..."
+        mkdir -p /opt/metrics-demo
+    }
+fi
+
+# Wait for tool installations
+wait $KUBECTL_PID $KIND_PID
+
+cd /opt/metrics-demo
+
+# Clean up aggressively before Elastic installation to free disk space
+echo "🧹 Aggressive cleanup before Elastic installation..."
+df -h / | tail -1
+
+# Check available disk space (in MB)
+AVAILABLE_MB=$(df -m / | tail -1 | awk '{print $4}')
+REQUIRED_MB=5120  # 5GB required for Elastic
+
+if [ "$AVAILABLE_MB" -lt "$REQUIRED_MB" ]; then
+    echo "⚠️  Warning: Only ${AVAILABLE_MB}MB available, need ${REQUIRED_MB}MB for Elastic"
+    echo "🧹 Performing maximum cleanup..."
+    
+    # Remove all unused Docker resources (including stopped containers)
+    docker system prune -af --volumes > /dev/null 2>&1 || true
+    # Remove build cache
+    docker builder prune -af > /dev/null 2>&1 || true
+    # Remove all unused images (not just dangling)
+    docker image prune -af > /dev/null 2>&1 || true
+    # Clean up apt cache
+    apt-get clean > /dev/null 2>&1 || true
+    rm -rf /var/lib/apt/lists/* > /dev/null 2>&1 || true
+    # Clean up temporary files (but keep setup.log)
+    find /tmp -mindepth 1 -maxdepth 1 ! -name 'setup.log' -exec rm -rf {} + > /dev/null 2>&1 || true
+    rm -rf /var/tmp/* > /dev/null 2>&1 || true
+    # Remove old logs
+    find /var/log -type f -name "*.log" -mtime +0 -delete > /dev/null 2>&1 || true
+    # Remove documentation
+    rm -rf /usr/share/doc/* > /dev/null 2>&1 || true
+    rm -rf /usr/share/man/* > /dev/null 2>&1 || true
+    # Remove locale data (if not needed)
+    find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} + > /dev/null 2>&1 || true
+    
+    # Check again
+    AVAILABLE_MB=$(df -m / | tail -1 | awk '{print $4}')
+    df -h / | tail -1
+    
+    if [ "$AVAILABLE_MB" -lt "$REQUIRED_MB" ]; then
+        echo "❌ Still only ${AVAILABLE_MB}MB available after cleanup"
+        echo "⚠️  Elastic installation may fail. Continuing anyway..."
+    else
+        echo "✅ Freed up enough space: ${AVAILABLE_MB}MB available"
+    fi
+else
+    echo "✅ Sufficient disk space: ${AVAILABLE_MB}MB available"
+fi
+
+# Get Elastic version from environment or use default
+ELASTIC_VERSION=${ELASTIC_VERSION:-"9.2.3"}
+echo "🔍 Starting local Elasticsearch and Kibana..."
+echo "📌 Requested version: $ELASTIC_VERSION"
+
+# Check if Elastic is already running
+if curl -s http://localhost:9200 > /dev/null 2>&1; then
+    echo "✅ Elasticsearch is already running on localhost:9200"
+    ELASTIC_PID=""
+    ELASTIC_ALREADY_RUNNING=true
+else
+    ELASTIC_ALREADY_RUNNING=false
+    
+    # Check if there's an existing installation that needs to be cleaned up
+    if [ -d "$HOME/elastic-start-local" ] || [ -d "/root/elastic-start-local" ]; then
+        ELASTIC_DIR="$HOME/elastic-start-local"
+        [ ! -d "$ELASTIC_DIR" ] && ELASTIC_DIR="/root/elastic-start-local"
+        
+        echo "🧹 Found existing Elastic installation, cleaning up..."
+        if [ -f "$ELASTIC_DIR/uninstall.sh" ]; then
+            cd "$ELASTIC_DIR" && ./uninstall.sh > /dev/null 2>&1 || true
+            echo "✅ Cleaned up existing installation"
+        else
+            # Force remove if uninstall script doesn't exist
+            rm -rf "$ELASTIC_DIR" 2>/dev/null || true
+            echo "✅ Removed existing installation directory"
+        fi
+    fi
+    
+    # Check if we have enough space for Elastic (5GB required)
+    AVAILABLE_MB=$(df -m / | tail -1 | awk '{print $4}')
+    REQUIRED_MB=5120  # 5GB required for Elastic
+    
+    if [ "$AVAILABLE_MB" -lt "$REQUIRED_MB" ]; then
+        echo "⚠️  WARNING: Insufficient disk space for local Elastic installation"
+        echo "   Available: ${AVAILABLE_MB}MB, Required: ${REQUIRED_MB}MB"
+        echo ""
+        echo "📝 Options:"
+        echo "   1. Use a remote Elastic instance (recommended for this environment)"
+        echo "      Set USE_LOCAL_ELASTIC=false and provide ELASTIC_OTLP_ENDPOINT and ELASTIC_API_KEY"
+        echo ""
+        echo "   2. Try to install anyway (may fail):"
+        echo "      The installation will attempt to proceed, but may fail."
+        echo ""
+        echo "⏳ Attempting Elastic installation anyway (may fail)..."
+    fi
+    
+    # Use Elastic's start-local script with version specification (start in background)
+    # Note: This may fail if disk space is insufficient
+    if [ -n "$ELASTIC_VERSION" ] && [ "$ELASTIC_VERSION" != "latest" ]; then
+        echo "📥 Installing Elastic stack version $ELASTIC_VERSION using start-local script (background)..."
+        curl -fsSL https://elastic.co/start-local | sh -s -- -v "$ELASTIC_VERSION" 2>&1 | tee -a "$SETUP_LOG" &
+        ELASTIC_PID=$!
+    else
+        echo "📥 Installing latest Elastic stack using start-local script (background)..."
+        curl -fsSL https://elastic.co/start-local | sh 2>&1 | tee -a "$SETUP_LOG" &
+        ELASTIC_PID=$!
+    fi
+fi
+
+echo ""
+echo "✅ Minimal setup complete! Terminal is now available."
+echo "⏳ Continuing full setup in background..."
+echo "   Run 'tail -f /tmp/setup.log' to monitor progress"
+echo ""
+
+# Detach from parent process and continue full setup in background
+# Use nohup and disown to ensure it continues after script exits
+(
+cd /opt/metrics-demo
+
+# Export environment variables for the background process
+export ELASTIC_OTLP_ENDPOINT="http://localhost:4318"
+export ELASTIC_API_KEY=""
+export ELASTIC_DATASET=${ELASTIC_DATASET:-metrics-demo}
+export USE_LOCAL_ELASTIC="true"
+export DEMO_MODE=${DEMO_MODE:-firehose}
+
+# Configure KUBECONFIG for K3s if available (needed for deploy.sh)
+if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ]; then
+    mkdir -p ~/.kube
+    # Check if config already exists and is the same file (symlink)
+    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config 2>/dev/null)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml 2>/dev/null)" ]; then
+        cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+        chmod 600 ~/.kube/config
+    fi
+    export KUBECONFIG=~/.kube/config
+    sed -i 's/127.0.0.1/localhost/g' ~/.kube/config || true
+fi
+
+# Wait for Elastic stack to start (only if we started it)
+if [ "$ELASTIC_ALREADY_RUNNING" = false ] && [ -n "$ELASTIC_PID" ]; then
+    echo "⏳ Waiting for Elastic stack to start..." >> "$SETUP_LOG" 2>&1
+    wait $ELASTIC_PID 2>/dev/null || true
+    
+    # Check if Elastic installation failed
+    if ! wait $ELASTIC_PID 2>/dev/null; then
+        ELASTIC_EXIT_CODE=$?
+        echo "⚠️  Elastic installation may have failed (exit code: $ELASTIC_EXIT_CODE)" >> "$SETUP_LOG" 2>&1
+        echo "   Check /tmp/setup.log for details" >> "$SETUP_LOG" 2>&1
+    fi
+fi
+
+# Wait for Elasticsearch to be ready (with timeout)
+echo "⏳ Waiting for Elasticsearch to be ready..."
+ELASTIC_READY=false
+for i in {1..60}; do
+    if curl -s http://localhost:9200 > /dev/null 2>&1; then
+        echo "✅ Elasticsearch is ready"
+        ELASTIC_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$ELASTIC_READY" = false ]; then
+    echo "⚠️  Elasticsearch did not start or is not accessible" >> "$SETUP_LOG" 2>&1
+    echo "   Attempting to start existing installation..." >> "$SETUP_LOG" 2>&1
+    # Try to start existing installation if it exists
+    if [ -d "$HOME/elastic-start-local" ] || [ -d "/root/elastic-start-local" ]; then
+        ELASTIC_DIR="$HOME/elastic-start-local"
+        [ ! -d "$ELASTIC_DIR" ] && ELASTIC_DIR="/root/elastic-start-local"
+        if [ -f "$ELASTIC_DIR/start.sh" ]; then
+            cd "$ELASTIC_DIR" && nohup ./start.sh >> "$SETUP_LOG" 2>&1 &
+            sleep 5
+            # Check again
+            for i in {1..30}; do
+                if curl -s http://localhost:9200 > /dev/null 2>&1; then
+                    echo "✅ Elasticsearch started successfully" >> "$SETUP_LOG" 2>&1
+                    ELASTIC_READY=true
+                    break
+                fi
+                sleep 2
+            done
+        fi
+    fi
+    
+    if [ "$ELASTIC_READY" = false ]; then
+        echo "⚠️  Elasticsearch still not accessible - continuing anyway" >> "$SETUP_LOG" 2>&1
+        echo "   The demo can still work with a remote Elastic instance" >> "$SETUP_LOG" 2>&1
+        echo "   Set USE_LOCAL_ELASTIC=false and provide remote credentials" >> "$SETUP_LOG" 2>&1
+    fi
+fi
+
+# Check if we're using K3s (pre-installed Kubernetes) or need to create kind cluster
+if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ] && kubectl cluster-info &> /dev/null 2>&1; then
+    echo "✅ K3s detected - configuring kubectl..."
+    # K3s uses kubeconfig at /etc/rancher/k3s/k3s.yaml
+    # Copy it to a user-accessible location and set KUBECONFIG
+    mkdir -p ~/.kube
+    # Check if config already exists and is the same file (symlink)
+    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config 2>/dev/null)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml 2>/dev/null)" ]; then
+        cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+        chmod 600 ~/.kube/config
+    fi
+    export KUBECONFIG=~/.kube/config
+    # Update the server URL to use localhost (K3s runs on the same host)
+    sed -i 's/127.0.0.1/localhost/g' ~/.kube/config || true
+    echo "✅ K3s kubeconfig configured"
+    # Verify kubectl can connect
+    if kubectl cluster-info &> /dev/null; then
+        echo "✅ K3s Kubernetes cluster is accessible"
+    else
+        echo "⚠️  K3s cluster may not be ready yet, will retry..."
+        sleep 5
+        if kubectl cluster-info &> /dev/null; then
+            echo "✅ K3s Kubernetes cluster is now accessible"
+        else
+            echo "⚠️  Warning: Cannot connect to K3s cluster, falling back to kind..."
+            # Fall through to kind creation
+        fi
+    fi
+fi
+
+# If K3s is not available or not working, use kind
+if ! kubectl cluster-info &> /dev/null 2>&1; then
+    echo "🔧 Creating kind cluster (K3s not available or not working)..."
+    if ! kind get clusters | grep -q "^metrics-demo$"; then
+        cat > /tmp/kind-config.yaml <<'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+EOF
+        kind create cluster --name metrics-demo --config /tmp/kind-config.yaml --wait 3m
+        echo "✅ Kind cluster created"
+        # Configure kubectl for kind
+        kind get kubeconfig --name metrics-demo > ~/.kube/config
+        chmod 600 ~/.kube/config
+        export KUBECONFIG=~/.kube/config
+        echo "✅ kubectl configured for kind cluster"
+    else
+        echo "✅ Kind cluster already exists"
+        # Ensure kubectl is configured
+        if ! kubectl cluster-info &> /dev/null 2>&1; then
+            kind get kubeconfig --name metrics-demo > ~/.kube/config
+            chmod 600 ~/.kube/config
+            export KUBECONFIG=~/.kube/config
+            echo "✅ kubectl configured for kind cluster"
+        fi
+    fi
+fi
+
+# Clean up disk space before building
+echo "🧹 Cleaning up disk space..."
+df -h / | tail -1
+# Remove all unused Docker resources (if Docker is available)
+if command -v docker &> /dev/null; then
+    docker system prune -af --volumes > /dev/null 2>&1 || true
+    # Remove build cache
+    docker builder prune -af > /dev/null 2>&1 || true
+fi
+# Clean up apt cache
+apt-get clean > /dev/null 2>&1 || true
+rm -rf /var/lib/apt/lists/* > /dev/null 2>&1 || true
+# Clean up temporary files (but keep setup.log)
+find /tmp -mindepth 1 -maxdepth 1 ! -name 'setup.log' -exec rm -rf {} + > /dev/null 2>&1 || true
+rm -rf /var/tmp/* > /dev/null 2>&1 || true
+echo "✅ Disk cleanup complete"
+df -h / | tail -1
+
+# Build Docker images in parallel (only if Docker is available)
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker is not available - cannot build images"
+    echo "   Please install Docker or use a different container runtime"
+    exit 1
+fi
+
+echo "🏗️  Building Docker images in parallel..."
+cd /opt/metrics-demo
+docker build -t frontend:latest ./services/frontend > /tmp/frontend-build.log 2>&1 &
+FRONTEND_PID=$!
+docker build -t api:latest ./services/api > /tmp/api-build.log 2>&1 &
+API_PID=$!
+docker build -t worker:latest ./services/worker > /tmp/worker-build.log 2>&1 &
+WORKER_PID=$!
+
+# Wait for all images to build and check for failures
+BUILD_FAILED=false
+BUILD_ERRORS=""
+
+# Check each build individually
+if wait $FRONTEND_PID; then
+    echo "✅ Frontend build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}frontend "
+    echo "❌ Frontend build failed (exit code: $?)"
+fi
+
+if wait $API_PID; then
+    echo "✅ API build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}api "
+    echo "❌ API build failed (exit code: $?)"
+fi
+
+if wait $WORKER_PID; then
+    echo "✅ Worker build completed"
+else
+    BUILD_FAILED=true
+    BUILD_ERRORS="${BUILD_ERRORS}worker "
+    echo "❌ Worker build failed (exit code: $?)"
+fi
+
+# If any build failed, show detailed logs
+if [ "$BUILD_FAILED" = true ]; then
+    echo ""
+    echo "❌ Docker build failures detected for: $BUILD_ERRORS"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    if [[ "$BUILD_ERRORS" == *"frontend"* ]]; then
+        echo "❌ Frontend build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/frontend-build.log || true
+        echo ""
+    fi
+    
+    if [[ "$BUILD_ERRORS" == *"api"* ]]; then
+        echo "❌ API build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/api-build.log || true
+        echo ""
+    fi
+    
+    if [[ "$BUILD_ERRORS" == *"worker"* ]]; then
+        echo "❌ Worker build log:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        tail -50 /tmp/worker-build.log || true
+        echo ""
+    fi
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ One or more Docker builds failed. Exiting."
+    exit 1
+fi
+
+echo "✅ All images built successfully"
+
+# Verify images exist before loading (don't clean up - we need these images!)
+if ! docker images | grep -q "frontend.*latest" || \
+   ! docker images | grep -q "api.*latest" || \
+   ! docker images | grep -q "worker.*latest"; then
+    echo "❌ Required Docker images not found after build. Cannot load into kind."
+    exit 1
+fi
+
+# Load images into Kubernetes cluster
+echo "📤 Loading images into Kubernetes cluster..."
+if command -v k3s &> /dev/null; then
+    # For K3s, we need to import Docker images into containerd
+    # K3s can use Docker images if Docker is installed, or we can use ctr to import
+    if command -v docker &> /dev/null && docker images | grep -q "frontend.*latest"; then
+        echo "   Using K3s with Docker - K3s should be able to use Docker images"
+        # K3s can access Docker images directly if Docker is running
+        # Verify images are available
+        docker images | grep -E "(frontend|api|worker).*latest" || echo "⚠️  Warning: Some images not found"
+        echo "✅ Images available for K3s"
+    else
+        echo "⚠️  Docker images not found - ensure images are built first"
+    fi
+else
+    # For kind, load images explicitly
+    if command -v kind &> /dev/null; then
+        kind load docker-image frontend:latest --name metrics-demo &
+        kind load docker-image api:latest --name metrics-demo &
+        kind load docker-image worker:latest --name metrics-demo &
+        wait
+    else
+        echo "⚠️  Neither K3s nor kind available - cannot load images"
+    fi
+fi
+
+# Deploy the demo
+echo "🚀 Deploying metrics demo..."
+cd /opt/metrics-demo
+
+# Ensure kubectl is configured before deploying
+if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ]; then
+    mkdir -p ~/.kube
+    # Check if config already exists and is the same file (symlink)
+    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config 2>/dev/null)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml 2>/dev/null)" ]; then
+        cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+        chmod 600 ~/.kube/config
+    fi
+    export KUBECONFIG=~/.kube/config
+    sed -i 's/127.0.0.1/localhost/g' ~/.kube/config || true
+fi
+
+# Verify kubectl can connect before deploying
+if ! kubectl cluster-info &> /dev/null; then
+    echo "❌ Cannot connect to Kubernetes cluster. Waiting 10 seconds and retrying..."
+    sleep 10
+    if ! kubectl cluster-info &> /dev/null; then
+        echo "❌ Still cannot connect to Kubernetes cluster. Deployment may fail."
+    fi
+fi
+
+./scripts/deploy.sh
+
+# Wait for pods to be ready (with shorter timeout, non-blocking)
+echo "⏳ Waiting for pods to be ready..."
+kubectl wait --for=condition=ready pod -l app=frontend -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=api -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=worker -n elastic-metrics-demo --timeout=180s || true &
+kubectl wait --for=condition=ready pod -l app=otel-collector -n elastic-metrics-demo --timeout=180s || true &
+wait
+
+echo ""
+echo "✅ Full setup complete!"
+echo ""
+echo "📊 Access the demo:"
+echo "  - Frontend: kubectl port-forward -n elastic-metrics-demo svc/frontend 3000:3000"
+echo "  - Kibana: http://localhost:5601"
+echo "  - Elasticsearch: http://localhost:9200"
+echo ""
+echo "📝 Next steps:"
+echo "  1. Wait 2-3 minutes for metrics to start flowing"
+echo "  2. Open Kibana and explore the metrics-generic.otel-default data view"
+echo "  3. Import dashboards from kibana/metrics-demo.ndjson"
+echo "  4. Switch between firehose and shaped modes: ./scripts/switch-mode.sh <mode>"
+) >> "$SETUP_LOG" 2>&1 &
+# Disown the background process so it continues after script exits
+disown $!
+
+# Create helper scripts and configure bashrc (do this immediately so terminal has them)
+
+# Create a helper script to view logs
+cat > /usr/local/bin/view-setup-logs <<'EOF'
+#!/bin/bash
+if [ -f "/tmp/setup.log" ]; then
+    echo "📋 Setup Logs (last 50 lines):"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    tail -50 /tmp/setup.log
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time"
+else
+    echo "⚠️  Setup log not found at /tmp/setup.log"
+fi
+EOF
+chmod +x /usr/local/bin/view-setup-logs
+
+# Add to bashrc to automatically show logs when terminal opens
+if ! grep -q "view-setup-logs" /root/.bashrc 2>/dev/null; then
+    echo "" >> /root/.bashrc
+    echo "# Automatically show setup logs when terminal opens" >> /root/.bashrc
+    echo "if [ -f /tmp/setup.log ] && [ -z \"\$SETUP_LOGS_SHOWN\" ]; then" >> /root/.bashrc
+    echo "    export SETUP_LOGS_SHOWN=1" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "    echo \"📋 Setup Logs (last 50 lines):\"" >> /root/.bashrc
+    echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> /root/.bashrc
+    echo "    tail -50 /tmp/setup.log" >> /root/.bashrc
+    echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "    echo \"💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time\"" >> /root/.bashrc
+    echo "    echo \"\"" >> /root/.bashrc
+    echo "fi" >> /root/.bashrc
+fi
+
+# Also add for regular user if different
+for bashrc in /home/*/.bashrc; do
+    [ ! -f "$bashrc" ] && continue
+    if ! grep -q "view-setup-logs" "$bashrc" 2>/dev/null; then
+            echo "" >> "$bashrc"
+            echo "# Automatically show setup logs when terminal opens" >> "$bashrc"
+            echo "if [ -f /tmp/setup.log ] && [ -z \"\$SETUP_LOGS_SHOWN\" ]; then" >> "$bashrc"
+            echo "    export SETUP_LOGS_SHOWN=1" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "    echo \"📋 Setup Logs (last 50 lines):\"" >> "$bashrc"
+            echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> "$bashrc"
+            echo "    tail -50 /tmp/setup.log" >> "$bashrc"
+            echo "    echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "    echo \"💡 Tip: Use 'tail -f /tmp/setup.log' to follow logs in real-time\"" >> "$bashrc"
+            echo "    echo \"\"" >> "$bashrc"
+            echo "fi" >> "$bashrc"
+    fi
+done
+
+# Exit immediately so Instruqt can show the terminal
+exit 0

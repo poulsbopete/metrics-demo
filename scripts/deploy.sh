@@ -10,10 +10,12 @@ if [ -f "$REPO_ROOT/.env" ]; then
     export $(cat "$REPO_ROOT/.env" | grep -v '^#' | xargs)
 fi
 
-# Required variables
-if [ -z "$ELASTIC_OTLP_ENDPOINT" ] || [ -z "$ELASTIC_API_KEY" ]; then
-    echo "Error: ELASTIC_OTLP_ENDPOINT and ELASTIC_API_KEY must be set"
-    exit 1
+# Required variables (skip check if using local Elastic)
+if [ "$USE_LOCAL_ELASTIC" != "true" ]; then
+    if [ -z "$ELASTIC_OTLP_ENDPOINT" ] || [ -z "$ELASTIC_API_KEY" ]; then
+        echo "Error: ELASTIC_OTLP_ENDPOINT and ELASTIC_API_KEY must be set"
+        exit 1
+    fi
 fi
 
 # Optional variables with defaults
@@ -49,6 +51,30 @@ fi
 
 # Read collector config
 COLLECTOR_YAML=$(cat "$COLLECTOR_CONFIG")
+
+# For local Elastic, adjust the endpoint based on the Kubernetes environment
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    # Detect if we're using K3s (which doesn't support host.docker.internal)
+    if command -v k3s &> /dev/null && kubectl cluster-info &> /dev/null; then
+        # K3s: Get the host gateway IP (the IP pods use to reach the host)
+        # This is typically the first IP of the default route
+        HOST_IP=$(ip route | grep default | awk '{print $3}' | head -1)
+        if [ -z "$HOST_IP" ]; then
+            # Fallback: try to get the host IP from the node
+            HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "127.0.0.1")
+        fi
+        if [ -z "$HOST_IP" ] || [ "$HOST_IP" = "127.0.0.1" ]; then
+            # Last resort: use the node's IP from K3s
+            HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "host.docker.internal")
+        fi
+        echo "Using K3s - setting Elastic endpoint to host IP: $HOST_IP:9200"
+        # Replace host.docker.internal with the actual host IP
+        COLLECTOR_YAML=$(echo "$COLLECTOR_YAML" | sed "s|host.docker.internal:9200|${HOST_IP}:9200|g")
+    else
+        # Kind or Docker Desktop: use host.docker.internal (already in config)
+        echo "Using kind/Docker - Elastic endpoint: host.docker.internal:9200"
+    fi
+fi
 
 # Read k6 script
 K6_SCRIPT=$(cat "$REPO_ROOT/loadgen/k6-script.js")
