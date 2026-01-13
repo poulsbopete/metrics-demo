@@ -307,13 +307,17 @@ fi
 # Wait for Elastic stack to start (only if we started it)
 if [ "$ELASTIC_ALREADY_RUNNING" = false ] && [ -n "$ELASTIC_PID" ]; then
     echo "⏳ Waiting for Elastic stack to start..." >> "$SETUP_LOG" 2>&1
-    wait $ELASTIC_PID 2>/dev/null || true
+    # Wait for the process and capture exit code
+    wait $ELASTIC_PID 2>/dev/null
+    ELASTIC_EXIT_CODE=$?
     
-    # Check if Elastic installation failed
-    if ! wait $ELASTIC_PID 2>/dev/null; then
-        ELASTIC_EXIT_CODE=$?
-        echo "⚠️  Elastic installation may have failed (exit code: $ELASTIC_EXIT_CODE)" >> "$SETUP_LOG" 2>&1
+    # Check if Elastic installation failed (non-zero exit code)
+    if [ "$ELASTIC_EXIT_CODE" -ne 0 ]; then
+        echo "⚠️  Elastic installation exited with code: $ELASTIC_EXIT_CODE" >> "$SETUP_LOG" 2>&1
+        echo "   This may be normal if Elastic is already installed or if there were warnings" >> "$SETUP_LOG" 2>&1
         echo "   Check /tmp/setup.log for details" >> "$SETUP_LOG" 2>&1
+    else
+        echo "✅ Elastic installation completed successfully" >> "$SETUP_LOG" 2>&1
     fi
 fi
 
