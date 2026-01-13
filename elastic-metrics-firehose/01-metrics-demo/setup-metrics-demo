@@ -19,40 +19,90 @@ if command -v k3s &> /dev/null; then
     # K3s images may have Docker or containerd - install Docker if not present
     if ! command -v docker &> /dev/null; then
         echo "Installing Docker for K3s image..."
-        apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential || true
+        apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential 2>&1 | grep -v "^$" || {
+            echo "⚠️  Docker installation may have had issues, continuing..."
+        }
     else
         echo "✅ Docker already available"
-        apt-get install -y -qq curl wget git jq build-essential || true
+        apt-get install -y -qq curl wget git jq build-essential 2>&1 | grep -v "^$" || true
     fi
 else
     # Standard Ubuntu VM - install everything
-    apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential parallel || true
+    apt-get install -y -qq curl wget git docker.io docker-compose jq build-essential parallel 2>&1 | grep -v "^$" || {
+        echo "⚠️  Some package installations may have had issues, continuing..."
+    }
 fi
 
 # Start Docker service (if Docker is installed)
 if command -v docker &> /dev/null; then
+    echo "🔧 Configuring Docker..."
+    
+    # Ensure Docker service is enabled
+    systemctl enable docker 2>/dev/null || true
+    
     if ! systemctl is-active --quiet docker 2>/dev/null; then
         echo "Starting Docker service..."
-        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
-        usermod -aG docker $USER 2>/dev/null || true
+        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || {
+            echo "⚠️  systemctl/service failed, trying direct dockerd start..."
+            # Last resort: try starting dockerd directly (for container environments)
+            dockerd > /tmp/dockerd.log 2>&1 &
+            sleep 3
+        }
+        
+        # Add user to docker group
+        usermod -aG docker $USER 2>/dev/null || usermod -aG docker root 2>/dev/null || true
+        
         # Wait for Docker to be ready
+        echo "⏳ Waiting for Docker to be ready..."
+        DOCKER_READY=false
         for i in {1..30}; do
             if docker info > /dev/null 2>&1; then
                 echo "✅ Docker is ready"
+                DOCKER_READY=true
                 break
             fi
             sleep 1
         done
+        
+        if [ "$DOCKER_READY" = false ]; then
+            echo "⚠️  Docker did not become ready after 30 seconds"
+            echo "   Checking Docker status..."
+            systemctl status docker 2>/dev/null || service docker status 2>/dev/null || true
+        fi
     else
         echo "✅ Docker service already running"
         # Verify Docker is actually working
         if ! docker info > /dev/null 2>&1; then
             echo "⚠️  Docker service is running but not responding, restarting..."
             systemctl restart docker 2>/dev/null || service docker restart 2>/dev/null || true
+            sleep 2
+            if ! docker info > /dev/null 2>&1; then
+                echo "❌ Docker service restart failed - Docker may not be functional"
+            fi
         fi
     fi
+    
+    # Final verification
+    if ! docker info > /dev/null 2>&1; then
+        echo "❌ ERROR: Docker is installed but not working"
+        echo "   Please check Docker installation and permissions"
+        exit 1
+    fi
 else
-    echo "⚠️  Docker not installed - will use containerd/K3s for container management"
+    echo "❌ ERROR: Docker not installed and is required for Elastic stack"
+    echo "   Attempting to install Docker..."
+    apt-get update -qq
+    apt-get install -y -qq docker.io 2>&1 | grep -v "^$" || {
+        echo "❌ Docker installation failed"
+        exit 1
+    }
+    # Retry Docker startup
+    systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+    sleep 2
+    if ! docker info > /dev/null 2>&1; then
+        echo "❌ Docker installation succeeded but daemon is not working"
+        exit 1
+    fi
 fi
 
 # Install kubectl (K3s images may already have it, but install if missing)
@@ -187,6 +237,29 @@ else
         echo ""
         echo "⏳ Attempting Elastic installation anyway (may fail)..."
     fi
+    
+    # Verify Docker is available and working before calling start-local
+    if ! command -v docker &> /dev/null; then
+        echo "❌ ERROR: Docker command not found. Cannot install Elastic stack."
+        echo "   Please ensure Docker is installed and in PATH."
+        exit 1
+    fi
+    
+    # Verify Docker daemon is running
+    if ! docker info > /dev/null 2>&1; then
+        echo "⚠️  Docker daemon not responding, attempting to start..."
+        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+        sleep 2
+        
+        # Retry verification
+        if ! docker info > /dev/null 2>&1; then
+            echo "❌ ERROR: Docker daemon is not running. Cannot install Elastic stack."
+            echo "   Please start Docker manually: systemctl start docker"
+            exit 1
+        fi
+    fi
+    
+    echo "✅ Docker verified and ready"
     
     # Use Elastic's start-local script with version specification (start in background)
     # Note: This may fail if disk space is insufficient
