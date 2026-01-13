@@ -6,16 +6,16 @@ namespace: elastic-metrics-demo
 resources:
   - ../../base
 
-patches:
-  - path: patch-collector-config.yaml
-    target:
-      kind: ConfigMap
-      name: otel-collector-config
-  - path: patch-secret.yaml
-    target:
-      kind: Secret
-      name: elastic-otlp-secret
-  - path: patch-demo-config.yaml
-    target:
-      kind: ConfigMap
-      name: demo-config
+images:
+  - name: frontend
+    newName: frontend
+    newTag: latest
+  - name: api
+    newName: api
+    newTag: latest
+  - name: worker
+    newName: worker
+    newTag: latest
+
+# Override images from environment variables if set
+# Usage: FRONTEND_IMAGE=registry/frontend:tag API_IMAGE=registry/api:tag WORKER_IMAGE=registry/worker:tag kustomize build . | kubectl apply -f -

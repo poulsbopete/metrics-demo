@@ -1,0 +1,90 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    limit_mib: 128
+    check_interval: 1s
+    spike_limit_mib: 64
+
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  # Add demo.mode resource attribute
+  transform/add_demo_mode:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["demo.mode"], "shaped")
+
+  # Remove high-cardinality labels
+  transform/remove_labels:
+    error_mode: ignore
+    metric_statements:
+      - context: metric
+        statements:
+          # Remove pod, instance, container, build_id labels
+          - delete_key(attributes, "pod")
+          - delete_key(attributes, "instance")
+          - delete_key(attributes, "container")
+          - delete_key(attributes, "build_id")
+          # Normalize path labels (e.g., /orders/123 -> /orders/{id})
+          - merge_maps(cache, attributes, "upsert")
+          - set(attributes["path"], replace_all_patterns(attributes["path"], "^/orders/\\d+$", "/orders/{id}"))
+          - set(attributes["path"], replace_all_patterns(attributes["path"], "^/users/\\d+$", "/users/{id}"))
+          - set(attributes["path"], replace_all_patterns(attributes["path"], "^/products/\\d+$", "/products/{id}"))
+          # Remove user_id in shaped mode
+          - delete_key(attributes, "user_id")
+
+  # Pre-aggregate into golden signals
+  transform/golden_signals:
+    error_mode: ignore
+    metric_statements:
+      - context: metric
+        statements:
+          # This processor would aggregate metrics into golden signals
+          # For now, we just pass through - shaping is done above
+
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: true
+    extract:
+      labels:
+        - tag_name: k8s.pod.label.app
+          key: app
+          from: pod
+        - tag_name: k8s.namespace.name
+          key: namespace
+          from: pod
+
+exporters:
+  # Use Elasticsearch HTTP exporter for local development
+  elasticsearch:
+    endpoints:
+      - http://host.docker.internal:9200
+    # No authentication needed for local Elastic
+    logs_index: metrics-generic
+    metrics_index: metrics-generic
+    flush:
+      bytes: 524288
+      interval: 10s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/add_demo_mode, transform/remove_labels, k8sattributes, batch]
+      exporters: [elasticsearch]
+
+  extensions: [health_check]

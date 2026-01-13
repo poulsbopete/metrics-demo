@@ -8,9 +8,11 @@ endif
 
 # Default values
 NAMESPACE ?= elastic-metrics-demo
-FRONTEND_IMAGE ?= frontend:latest
-API_IMAGE ?= api:latest
-WORKER_IMAGE ?= worker:latest
+IMAGE_REGISTRY ?= 
+IMAGE_TAG ?= latest
+FRONTEND_IMAGE ?= $(if $(IMAGE_REGISTRY),$(IMAGE_REGISTRY)/frontend:$(IMAGE_TAG),frontend:latest)
+API_IMAGE ?= $(if $(IMAGE_REGISTRY),$(IMAGE_REGISTRY)/api:$(IMAGE_TAG),api:latest)
+WORKER_IMAGE ?= $(if $(IMAGE_REGISTRY),$(IMAGE_REGISTRY)/worker:$(IMAGE_TAG),worker:latest)
 KIND_CLUSTER ?= metrics-demo
 
 help:
@@ -24,10 +26,36 @@ help:
 
 build:
 	@echo "Building Docker images..."
+	@echo "  Frontend: $(FRONTEND_IMAGE)"
+	@echo "  API: $(API_IMAGE)"
+	@echo "  Worker: $(WORKER_IMAGE)"
 	docker build -t $(FRONTEND_IMAGE) ./services/frontend
 	docker build -t $(API_IMAGE) ./services/api
 	docker build -t $(WORKER_IMAGE) ./services/worker
 	@echo "Build complete!"
+
+push: build
+	@if [ -z "$(IMAGE_REGISTRY)" ]; then \
+		echo "Error: IMAGE_REGISTRY must be set for push target"; \
+		echo "Examples:"; \
+		echo "  IMAGE_REGISTRY=123456789.dkr.ecr.us-west-2.amazonaws.com make push  # AWS ECR"; \
+		echo "  IMAGE_REGISTRY=gcr.io/my-project make push  # GCP GCR"; \
+		echo "  IMAGE_REGISTRY=myuser make push  # Docker Hub"; \
+		exit 1; \
+	fi
+	@echo "Pushing images to $(IMAGE_REGISTRY)..."
+	@echo "  Pushing $(FRONTEND_IMAGE)..."
+	docker push $(FRONTEND_IMAGE)
+	@echo "  Pushing $(API_IMAGE)..."
+	docker push $(API_IMAGE)
+	@echo "  Pushing $(WORKER_IMAGE)..."
+	docker push $(WORKER_IMAGE)
+	@echo "Push complete!"
+	@echo ""
+	@echo "Set these environment variables for deployment:"
+	@echo "  export FRONTEND_IMAGE=$(FRONTEND_IMAGE)"
+	@echo "  export API_IMAGE=$(API_IMAGE)"
+	@echo "  export WORKER_IMAGE=$(WORKER_IMAGE)"
 
 load-kind:
 	@echo "Loading images into kind cluster..."

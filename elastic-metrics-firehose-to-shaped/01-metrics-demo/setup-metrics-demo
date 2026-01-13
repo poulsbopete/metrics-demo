@@ -1,0 +1,11 @@
+#!/bin/bash
+# Setup script for metrics-demo challenge
+# This is called automatically by Instruqt when the challenge starts
+
+cd /opt/metrics-demo || {
+    echo "ERROR: /opt/metrics-demo directory not found"
+    exit 1
+}
+
+# Run the setup script
+bash track_scripts/setup-metrics-demo

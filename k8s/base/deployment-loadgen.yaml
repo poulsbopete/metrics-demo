@@ -1,24 +1,32 @@
-apiVersion: batch/v1
-kind: Job
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: loadgen
   namespace: elastic-metrics-demo
   labels:
     app: loadgen
 spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
   template:
     metadata:
       labels:
         app: loadgen
     spec:
-      restartPolicy: Never
       containers:
       - name: k6
         image: grafana/k6:latest
         command:
-        - k6
-        - run
-        - /scripts/k6-script.js
+        - sh
+        - -c
+        - |
+          while true; do
+            k6 run /scripts/k6-script.js
+            echo "Loadgen cycle completed, restarting in 5 seconds..."
+            sleep 5
+          done
         env:
         - name: FRONTEND_URL
           value: "http://frontend:8080"

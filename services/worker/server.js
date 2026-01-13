@@ -67,8 +67,12 @@ const queueDepth = meter.createUpDownCounter('queue_depth', {
 
 // Simulate queue depth
 let currentQueueDepth = 0;
+let lastReportedQueueDepth = 0;
 setInterval(() => {
-  currentQueueDepth = Math.floor(Math.random() * 100);
+  const newQueueDepth = Math.floor(Math.random() * 100);
+  const delta = newQueueDepth - lastReportedQueueDepth;
+  currentQueueDepth = newQueueDepth;
+  
   const labels = {
     service: OTEL_SERVICE_NAME,
   };
@@ -78,7 +82,10 @@ setInterval(() => {
     labels.container = 'worker';
     labels.build_id = process.env.BUILD_ID || 'build-123';
   }
-  queueDepth.add(currentQueueDepth - queueDepth.lastValue || 0, labels);
+  
+  // Add the delta to the counter (UpDownCounter tracks cumulative changes)
+  queueDepth.add(delta, labels);
+  lastReportedQueueDepth = newQueueDepth;
 }, 2000);
 
 // Helper to generate random user ID

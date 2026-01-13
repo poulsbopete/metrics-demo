@@ -21,9 +21,70 @@ This demo showcases two modes of metric collection:
 
 ### Cloud (EKS)
 - AWS CLI configured
-- Terraform 1.5+ (optional, for EKS cluster)
 - kubectl
 - make
+- Docker (for building images)
+- AWS ECR access (or GCP GCR / Docker Hub)
+
+## Quick Start (EKS)
+
+1. **Create EKS cluster:**
+```bash
+eksctl create cluster --name metrics-demo --region us-west-2 --without-nodegroup --version 1.34
+eksctl create nodegroup --cluster metrics-demo --region us-west-2 --nodes 2 --node-type t3.medium
+```
+
+2. **Set up AWS ECR repository:**
+```bash
+export AWS_REGION=us-west-2
+aws ecr create-repository --repository-name metrics-demo --region $AWS_REGION || true
+export IMAGE_REGISTRY=$(aws ecr describe-repositories --repository-names metrics-demo --region $AWS_REGION --query 'repositories[0].repositoryUri' --output text)
+export IMAGE_TAG=latest
+```
+
+3. **Build and push images:**
+```bash
+./scripts/build-and-push-images.sh
+```
+
+4. **Set environment variables:**
+```bash
+export ELASTIC_OTLP_ENDPOINT=https://your-endpoint.ingest.elastic.cloud:443
+export ELASTIC_API_KEY=your-api-key-here
+export ELASTIC_DATASET=metrics-demo
+export DEMO_MODE=firehose
+export OVERLAY=eks
+```
+
+5. **Deploy:**
+```bash
+make deploy
+```
+
+6. **Import Kibana Dashboards:**
+```bash
+# Option 1: Via Kibana UI
+# 1. Open Kibana in your browser
+# 2. Navigate to: Stack Management > Saved Objects
+# 3. Click "Import" button
+# 4. Upload: kibana/metrics-demo.ndjson
+# 5. Click "Import" to import all dashboards
+
+# Option 2: Via API (if you have Kibana endpoint and API key)
+curl -X POST "https://your-kibana-endpoint/api/saved_objects/_import?overwrite=true" \
+  -H "kbn-xsrf: true" \
+  -H "Authorization: ApiKey YOUR_API_KEY" \
+  --form file=@kibana/metrics-demo.ndjson
+
+# Option 3: Via Elastic Cloud Console
+# 1. Log into Elastic Cloud
+# 2. Go to your deployment
+# 3. Click "Kibana" to open Kibana
+# 4. Navigate to: Stack Management > Saved Objects > Import
+# 5. Upload: kibana/metrics-demo.ndjson
+```
+
+**Note:** The `build-and-push-images.sh` script will output the image names. Make sure to set `FRONTEND_IMAGE`, `API_IMAGE`, and `WORKER_IMAGE` if they differ from the defaults.
 
 ## Quick Start (Local with kind)
 
@@ -56,7 +117,24 @@ This will:
 ./scripts/switch-mode.sh firehose  # or 'shaped'
 ```
 
-5. **Teardown:**
+5. **Import Kibana Dashboards:**
+```bash
+# Import pre-built dashboards for visualizing metrics
+# In Kibana, go to: Stack Management > Saved Objects > Import
+# Upload: kibana/metrics-demo.ndjson
+# Or use the API:
+curl -X POST "https://your-kibana-endpoint/api/saved_objects/_import" \
+  -H "kbn-xsrf: true" \
+  -H "Authorization: ApiKey YOUR_API_KEY" \
+  --form file=@kibana/metrics-demo.ndjson
+```
+
+The dashboards include:
+- **Cardinality & Cost Pressure**: Shows unique label combinations and high-cardinality metrics
+- **Before vs After (Firehose vs Shaped)**: Side-by-side comparison of firehose vs shaped metrics
+- **Golden Signals Overview**: Request rate, error rate, latency, and saturation metrics
+
+6. **Teardown:**
 ```bash
 make teardown
 ```
@@ -202,6 +280,20 @@ Optional:
 ## EKS Deployment
 
 See [terraform/README.md](terraform/README.md) for EKS deployment instructions.
+
+## Kibana Dashboards
+
+Pre-built dashboards are available to visualize the metrics. See [docs/KIBANA_DASHBOARDS.md](docs/KIBANA_DASHBOARDS.md) for detailed import instructions.
+
+**Quick Import:**
+1. In Kibana, go to: **Stack Management** > **Saved Objects** > **Import**
+2. Upload: `kibana/metrics-demo.ndjson`
+3. Click **Import**
+
+The dashboards include:
+- **Cardinality & Cost Pressure**: Shows unique label combinations and high-cardinality metrics
+- **Before vs After (Firehose vs Shaped)**: Side-by-side comparison of firehose vs shaped metrics
+- **Golden Signals Overview**: Request rate, error rate, latency, and saturation metrics
 
 ## License
 

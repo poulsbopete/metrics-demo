@@ -13,6 +13,7 @@ resources:
   - deployment-api.yaml
   - deployment-worker.yaml
   - deployment-otel-collector.yaml
+  - deployment-loadgen.yaml
   - service-frontend.yaml
   - service-api.yaml
   - service-worker.yaml

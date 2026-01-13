@@ -20,19 +20,74 @@ export const options = {
 
 const BASE_URL = __ENV.FRONTEND_URL || 'http://frontend:8080';
 
-export default function () {
-  // Generate random paths to simulate high cardinality
-  const paths = [
-    '/api/call',
-    '/orders/12345',
-    '/orders/67890',
-    '/users/111',
-    '/users/222',
-    '/products/333',
-    '/products/444',
-  ];
+// Global state to cache frontend status
+let frontendStatus = null;
+let lastStatusCheck = 0;
+const STATUS_CHECK_INTERVAL = 10000; // Check every 10 seconds
+
+// Check frontend status to determine traffic pattern
+function getFrontendStatus() {
+  const now = Date.now();
+  // Cache status for 10 seconds to avoid too many status checks
+  if (frontendStatus && (now - lastStatusCheck) < STATUS_CHECK_INTERVAL) {
+    return frontendStatus;
+  }
   
-  const randomPath = paths[Math.floor(Math.random() * paths.length)];
+  try {
+    const statusRes = http.get(`${BASE_URL}/status`, { timeout: '2s' });
+    if (statusRes.status === 200) {
+      frontendStatus = JSON.parse(statusRes.body);
+      lastStatusCheck = now;
+      return frontendStatus;
+    }
+  } catch (e) {
+    // If status check fails, use cached status or default
+  }
+  
+  // Return cached status or default
+  return frontendStatus || { mode: 'firehose', cardinalityBombMode: false, highCardinalityMode: false };
+}
+
+export default function () {
+  // Check frontend status periodically
+  const status = getFrontendStatus();
+  const bombMode = status.cardinalityBombMode === true;
+  const highCardinality = status.highCardinalityMode === true || status.mode === 'firehose';
+  
+  let randomPath;
+  
+  if (bombMode) {
+    // Cardinality bomb mode: generate paths with random IDs
+    const pathPrefixes = ['/orders/', '/users/', '/products/', '/items/', '/transactions/'];
+    const prefix = pathPrefixes[Math.floor(Math.random() * pathPrefixes.length)];
+    const randomId = Math.floor(Math.random() * 10000);
+    randomPath = `${prefix}${randomId}`;
+  } else if (highCardinality) {
+    // High cardinality mode: use predefined paths with some variation
+    const paths = [
+      '/api/call',
+      `/orders/${Math.floor(Math.random() * 1000)}`,
+      `/orders/${Math.floor(Math.random() * 1000)}`,
+      `/users/${Math.floor(Math.random() * 1000)}`,
+      `/users/${Math.floor(Math.random() * 1000)}`,
+      `/products/${Math.floor(Math.random() * 1000)}`,
+      `/products/${Math.floor(Math.random() * 1000)}`,
+    ];
+    randomPath = paths[Math.floor(Math.random() * paths.length)];
+  } else {
+    // Shaped mode: use normalized paths
+    const paths = [
+      '/api/call',
+      '/orders/12345',
+      '/orders/67890',
+      '/users/111',
+      '/users/222',
+      '/products/333',
+      '/products/444',
+    ];
+    randomPath = paths[Math.floor(Math.random() * paths.length)];
+  }
+  
   const url = `${BASE_URL}${randomPath}`;
   
   const params = {

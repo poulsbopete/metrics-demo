@@ -25,15 +25,26 @@ OVERLAY=${OVERLAY:-local-kind}
 echo "Deploying with mode: $DEMO_MODE"
 echo "Using overlay: $OVERLAY"
 
-# Determine collector config file
+# Determine collector config file (use local configs if USE_LOCAL_ELASTIC is set)
 COLLECTOR_CONFIG=""
-if [ "$DEMO_MODE" = "firehose" ]; then
-    COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-firehose.yaml"
-elif [ "$DEMO_MODE" = "shaped" ]; then
-    COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-shaped.yaml"
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    if [ "$DEMO_MODE" = "firehose" ]; then
+        COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-local.yaml"
+    elif [ "$DEMO_MODE" = "shaped" ]; then
+        COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-shaped-local.yaml"
+    else
+        echo "Error: DEMO_MODE must be 'firehose' or 'shaped'"
+        exit 1
+    fi
 else
-    echo "Error: DEMO_MODE must be 'firehose' or 'shaped'"
-    exit 1
+    if [ "$DEMO_MODE" = "firehose" ]; then
+        COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-firehose.yaml"
+    elif [ "$DEMO_MODE" = "shaped" ]; then
+        COLLECTOR_CONFIG="$REPO_ROOT/otel/collector-shaped.yaml"
+    else
+        echo "Error: DEMO_MODE must be 'firehose' or 'shaped'"
+        exit 1
+    fi
 fi
 
 # Read collector config
@@ -45,13 +56,22 @@ K6_SCRIPT=$(cat "$REPO_ROOT/loadgen/k6-script.js")
 # Create namespace if it doesn't exist
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Create/update secret
-kubectl create secret generic elastic-otlp-secret \
-    --from-literal=ELASTIC_OTLP_ENDPOINT="$ELASTIC_OTLP_ENDPOINT" \
-    --from-literal=ELASTIC_API_KEY="$ELASTIC_API_KEY" \
-    --from-literal=ELASTIC_DATASET="$ELASTIC_DATASET" \
-    -n "$NAMESPACE" \
-    --dry-run=client -o yaml | kubectl apply -f -
+# Create/update secret (skip API key for local Elastic)
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    kubectl create secret generic elastic-otlp-secret \
+        --from-literal=ELASTIC_OTLP_ENDPOINT="http://host.docker.internal:9200" \
+        --from-literal=ELASTIC_API_KEY="" \
+        --from-literal=ELASTIC_DATASET="$ELASTIC_DATASET" \
+        -n "$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+else
+    kubectl create secret generic elastic-otlp-secret \
+        --from-literal=ELASTIC_OTLP_ENDPOINT="$ELASTIC_OTLP_ENDPOINT" \
+        --from-literal=ELASTIC_API_KEY="$ELASTIC_API_KEY" \
+        --from-literal=ELASTIC_DATASET="$ELASTIC_DATASET" \
+        -n "$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+fi
 
 # Create/update demo config
 kubectl create configmap demo-config \
@@ -65,9 +85,36 @@ kubectl create configmap loadgen-script \
     -n "$NAMESPACE" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-# Apply kustomize
+# Apply kustomize with image overrides if set
 cd "$REPO_ROOT/k8s/overlays/$OVERLAY"
+
+# Override images if environment variables are set
+if [ -n "$FRONTEND_IMAGE" ] || [ -n "$API_IMAGE" ] || [ -n "$WORKER_IMAGE" ]; then
+    # Backup original kustomization.yaml
+    cp kustomization.yaml kustomization.yaml.bak
+    
+    # Use kustomize edit to set images
+    if [ -n "$FRONTEND_IMAGE" ]; then
+        kustomize edit set image frontend="$FRONTEND_IMAGE"
+        echo "Set frontend image to: $FRONTEND_IMAGE"
+    fi
+    if [ -n "$API_IMAGE" ]; then
+        kustomize edit set image api="$API_IMAGE"
+        echo "Set api image to: $API_IMAGE"
+    fi
+    if [ -n "$WORKER_IMAGE" ]; then
+        kustomize edit set image worker="$WORKER_IMAGE"
+        echo "Set worker image to: $WORKER_IMAGE"
+    fi
+fi
+
 kubectl apply -k .
+
+# Restore original kustomization.yaml if we modified it
+if [ -f kustomization.yaml.bak ]; then
+    mv kustomization.yaml.bak kustomization.yaml
+fi
+
 cd "$REPO_ROOT"
 
 # Update collector config AFTER kustomize (to override the placeholder)
@@ -83,11 +130,8 @@ kubectl wait --for=condition=available --timeout=300s deployment/api -n "$NAMESP
 kubectl wait --for=condition=available --timeout=300s deployment/worker -n "$NAMESPACE" || true
 kubectl wait --for=condition=available --timeout=300s deployment/otel-collector -n "$NAMESPACE" || true
 
-# Delete existing loadgen job if it exists
-kubectl delete job loadgen -n "$NAMESPACE" --ignore-not-found=true
-
-# Create loadgen job
-kubectl apply -f "$REPO_ROOT/k8s/base/job-loadgen.yaml"
+# Apply loadgen deployment (will be included in kustomize)
+# The deployment runs continuously and adapts to frontend status changes
 
 echo ""
 echo "Deployment complete!"
