@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: elastic-metrics-demo
+
+resources:
+  - ../../base
+
+patches:
+  - path: patch-collector-config.yaml
+    target:
+      kind: ConfigMap
+      name: otel-collector-config
+  - path: patch-secret.yaml
+    target:
+      kind: Secret
+      name: elastic-otlp-secret
+  - path: patch-demo-config.yaml
+    target:
+      kind: ConfigMap
+      name: demo-config

@@ -1,13 +1,21 @@
 version: "3"
 virtualmachines:
+- name: es3-api
+  image: elastic-pmm/es3-api-v2
+  shell: /bin/bash
+  environment:
+    PROJECT_TYPE: observability
+    PRODUCT_TIER: complete
+    REGIONS: aws-us-east-1
+  memory: 4096
+  cpus: 1
 - name: metrics-demo
   image: instruqt/k3s-v1-33-4
   shell: /bin/bash
   environment:
     DEMO_MODE: firehose
     ELASTIC_DATASET: metrics-demo
-    USE_LOCAL_ELASTIC: "true"
-    ELASTIC_VERSION: "9.3.0-SNAPSHOT"
+    USE_LOCAL_ELASTIC: "false"
   memory: 16384
   cpus: 4
   allow_external_ingress:

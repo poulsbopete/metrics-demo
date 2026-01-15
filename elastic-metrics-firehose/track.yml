@@ -11,11 +11,22 @@ developers:
 - peter.simkins@elastic.co
 idle_timeout: 300
 timelimit: 3600
+lifecycle:
+  setup:
+    - script: track_scripts/setup-es3-api
+      host: es3-api
+    - script: track_scripts/setup-metrics-demo
+      host: metrics-demo
+  cleanup:
+    - script: track_scripts/cleanup-es3-api
+      host: es3-api
+    - script: track_scripts/cleanup-metrics-demo
+      host: metrics-demo
 lab_config:
   sidebar_enabled: true
   feedback_recap_enabled: true
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "10598603517499329514"
+checksum: "538317986322951554"
 enhanced_loading: true

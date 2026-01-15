@@ -191,108 +191,97 @@ else
     echo "✅ Sufficient disk space: ${AVAILABLE_MB}MB available"
 fi
 
-# Get Elastic version from environment or use default
-ELASTIC_VERSION=${ELASTIC_VERSION:-"9.2.3"}
-echo "🔍 Starting local Elasticsearch and Kibana..."
-echo "📌 Requested version: $ELASTIC_VERSION"
+# Configure Elastic connection (serverless or local)
+USE_LOCAL_ELASTIC=${USE_LOCAL_ELASTIC:-"false"}
 
-# Check if Elastic is already running
-if curl -s http://localhost:9200 > /dev/null 2>&1; then
-    echo "✅ Elasticsearch is already running on localhost:9200"
-    ELASTIC_PID=""
-    ELASTIC_ALREADY_RUNNING=true
-else
-    ELASTIC_ALREADY_RUNNING=false
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    echo "🔍 Setting up local Elasticsearch and Kibana..."
+    echo "⚠️  Local Elastic setup is deprecated - consider using serverless instance"
     
-    # Check if there's an existing installation that needs to be cleaned up
-    if [ -d "$HOME/elastic-start-local" ] || [ -d "/root/elastic-start-local" ]; then
-        ELASTIC_DIR="$HOME/elastic-start-local"
-        [ ! -d "$ELASTIC_DIR" ] && ELASTIC_DIR="/root/elastic-start-local"
-        
-        echo "🧹 Found existing Elastic installation, cleaning up..."
-        if [ -f "$ELASTIC_DIR/uninstall.sh" ]; then
-            cd "$ELASTIC_DIR" && ./uninstall.sh > /dev/null 2>&1 || true
-            echo "✅ Cleaned up existing installation"
-        else
-            # Force remove if uninstall script doesn't exist
-            rm -rf "$ELASTIC_DIR" 2>/dev/null || true
-            echo "✅ Removed existing installation directory"
-        fi
-    fi
-    
-    # Check if we have enough space for Elastic (5GB required)
-    AVAILABLE_MB=$(df -m / | tail -1 | awk '{print $4}')
-    REQUIRED_MB=5120  # 5GB required for Elastic
-    
-    if [ "$AVAILABLE_MB" -lt "$REQUIRED_MB" ]; then
-        echo "⚠️  WARNING: Insufficient disk space for local Elastic installation"
-        echo "   Available: ${AVAILABLE_MB}MB, Required: ${REQUIRED_MB}MB"
-        echo ""
-        echo "📝 Options:"
-        echo "   1. Use a remote Elastic instance (recommended for this environment)"
-        echo "      Set USE_LOCAL_ELASTIC=false and provide ELASTIC_OTLP_ENDPOINT and ELASTIC_API_KEY"
-        echo ""
-        echo "   2. Try to install anyway (may fail):"
-        echo "      The installation will attempt to proceed, but may fail."
-        echo ""
-        echo "⏳ Attempting Elastic installation anyway (may fail)..."
-    fi
-    
-    # Verify Docker is available and working before calling start-local
-    if ! command -v docker &> /dev/null; then
-        echo "❌ ERROR: Docker command not found. Cannot install Elastic stack."
-        echo "   Please ensure Docker is installed and in PATH."
-        exit 1
-    fi
-    
-    # Verify Docker daemon is running
-    if ! docker info > /dev/null 2>&1; then
-        echo "⚠️  Docker daemon not responding, attempting to start..."
-        systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
-        sleep 2
-        
-        # Retry verification
-        if ! docker info > /dev/null 2>&1; then
-            echo "❌ ERROR: Docker daemon is not running. Cannot install Elastic stack."
-            echo "   Please start Docker manually: systemctl start docker"
-            exit 1
-        fi
-    fi
-    
-    echo "✅ Docker verified and ready"
-    
-    # Ensure Docker is in PATH and export it for the start-local script
-    DOCKER_PATH=$(command -v docker)
-    if [ -z "$DOCKER_PATH" ]; then
-        echo "❌ ERROR: Docker command not found in PATH"
-        exit 1
-    fi
-    echo "📍 Docker found at: $DOCKER_PATH"
-    
-    # Ensure PATH includes common Docker locations
-    export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
-    if [ -d "/usr/local/bin" ]; then
-        export PATH="/usr/local/bin:$PATH"
-    fi
-    
-    # Verify Docker is accessible with full PATH
-    if ! command -v docker &> /dev/null; then
-        echo "❌ ERROR: Docker not accessible even with full PATH"
-        exit 1
-    fi
-    
-    # Use Elastic's start-local script with version specification (start in background)
-    # Note: This may fail if disk space is insufficient
-    # Export PATH and DOCKER_PATH to ensure start-local can find Docker
-    if [ -n "$ELASTIC_VERSION" ] && [ "$ELASTIC_VERSION" != "latest" ]; then
-        echo "📥 Installing Elastic stack version $ELASTIC_VERSION using start-local script (background)..."
-        (export PATH="$PATH"; curl -fsSL https://elastic.co/start-local | sh -s -- -v "$ELASTIC_VERSION" 2>&1 | tee -a "$SETUP_LOG") &
-        ELASTIC_PID=$!
+    # Check if Elastic is already running
+    if curl -s http://localhost:9200 > /dev/null 2>&1; then
+        echo "✅ Elasticsearch is already running on localhost:9200"
+        ELASTIC_PID=""
+        ELASTIC_ALREADY_RUNNING=true
     else
-        echo "📥 Installing latest Elastic stack using start-local script (background)..."
-        (export PATH="$PATH"; curl -fsSL https://elastic.co/start-local | sh 2>&1 | tee -a "$SETUP_LOG") &
-        ELASTIC_PID=$!
+        echo "❌ Local Elastic not running and USE_LOCAL_ELASTIC=true"
+        echo "   Please use serverless instance (USE_LOCAL_ELASTIC=false)"
+        exit 1
     fi
+else
+    echo "☁️  Using serverless observability instance"
+    echo "⏳ Waiting for serverless observability instance to be ready..."
+    
+    # Wait for es3-api VM to be ready and fetch project details
+    MAX_WAIT=300
+    WAIT_COUNT=0
+    PROJECT_JSON=""
+    REGION="aws-us-east-1"
+    
+    while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+        # Try to fetch project details from es3-api JSON server
+        if curl -s http://es3-api:8081 > /dev/null 2>&1; then
+            PROJECT_JSON=$(curl -s http://es3-api:8081 2>/dev/null || echo "")
+            if [ -n "$PROJECT_JSON" ] && echo "$PROJECT_JSON" | jq -e . > /dev/null 2>&1; then
+                echo "✅ Serverless observability instance is ready"
+                break
+            fi
+        fi
+        
+        # Alternative: Check agent variables (if es3-api sets them)
+        ES_KIBANA_URL=$(agent variable get ES_KIBANA_URL 2>/dev/null || echo "")
+        if [ -n "$ES_KIBANA_URL" ]; then
+            echo "✅ Serverless observability instance is ready (from agent variables)"
+            break
+        fi
+        
+        sleep 2
+        WAIT_COUNT=$((WAIT_COUNT + 2))
+        if [ $((WAIT_COUNT % 20)) -eq 0 ]; then
+            echo "   Still waiting... ($WAIT_COUNT/$MAX_WAIT seconds)"
+        fi
+    done
+    
+    if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+        echo "❌ ERROR: Serverless observability instance did not become ready"
+        echo "   Check es3-api VM logs for details"
+        exit 1
+    fi
+    
+    # Extract endpoints and credentials
+    if [ -n "$PROJECT_JSON" ]; then
+        ELASTIC_OTLP_ENDPOINT=$(echo "$PROJECT_JSON" | jq -r --arg region "$REGION" '.[$region].endpoints.elasticsearch // empty')
+        ELASTIC_API_KEY=$(echo "$PROJECT_JSON" | jq -r --arg region "$REGION" '.[$region].credentials.api_key // empty')
+        ES_USERNAME=$(echo "$PROJECT_JSON" | jq -r --arg region "$REGION" '.[$region].credentials.username // "elastic"')
+        ES_PASSWORD=$(echo "$PROJECT_JSON" | jq -r --arg region "$REGION" '.[$region].credentials.password // empty')
+    else
+        # Fallback to agent variables
+        ELASTIC_OTLP_ENDPOINT=$(agent variable get ES_URL 2>/dev/null || echo "")
+        ELASTIC_API_KEY=$(agent variable get ES_API_KEY 2>/dev/null || echo "")
+        ES_USERNAME=$(agent variable get ES_USERNAME 2>/dev/null || echo "elastic")
+        ES_PASSWORD=$(agent variable get ES_PASSWORD 2>/dev/null || echo "")
+    fi
+    
+    # Validate we have required values
+    if [ -z "$ELASTIC_OTLP_ENDPOINT" ] || [ -z "$ELASTIC_API_KEY" ]; then
+        echo "❌ ERROR: Failed to retrieve serverless observability credentials"
+        echo "   ELASTIC_OTLP_ENDPOINT: ${ELASTIC_OTLP_ENDPOINT:-empty}"
+        echo "   ELASTIC_API_KEY: ${ELASTIC_API_KEY:+set}${ELASTIC_API_KEY:-empty}"
+        exit 1
+    fi
+    
+    # Export for use in deployment
+    export ELASTIC_OTLP_ENDPOINT
+    export ELASTIC_API_KEY
+    export USE_LOCAL_ELASTIC="false"
+    
+    echo "✅ Serverless observability instance configured"
+    echo "   Endpoint: $ELASTIC_OTLP_ENDPOINT"
+    echo "   Username: $ES_USERNAME"
+    
+    # No local Elastic PID when using serverless
+    ELASTIC_PID=""
+    ELASTIC_ALREADY_RUNNING=false
 fi
 
 echo ""
@@ -307,26 +296,30 @@ echo ""
 cd /opt/metrics-demo
 
 # Export environment variables for the background process
-export ELASTIC_OTLP_ENDPOINT="http://localhost:4318"
-export ELASTIC_API_KEY=""
+# These will be set from serverless instance or use defaults for local
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    export ELASTIC_OTLP_ENDPOINT="http://localhost:9200"
+    export ELASTIC_API_KEY=""
+    export USE_LOCAL_ELASTIC="true"
+else
+    # Serverless credentials should already be set above
+    export USE_LOCAL_ELASTIC="false"
+    # ELASTIC_OTLP_ENDPOINT and ELASTIC_API_KEY should already be exported
+fi
 export ELASTIC_DATASET=${ELASTIC_DATASET:-metrics-demo}
-export USE_LOCAL_ELASTIC="true"
 export DEMO_MODE=${DEMO_MODE:-firehose}
 
 # Configure KUBECONFIG for K3s if available (needed for deploy.sh)
 if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ]; then
     mkdir -p ~/.kube
-    # Check if config already exists and is the same file (symlink)
-    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config 2>/dev/null)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml 2>/dev/null)" ]; then
-        cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
-        chmod 600 ~/.kube/config
-    fi
+    cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+    chmod 600 ~/.kube/config
     export KUBECONFIG=~/.kube/config
     sed -i 's/127.0.0.1/localhost/g' ~/.kube/config || true
 fi
 
-# Wait for Elastic stack to start (only if we started it)
-if [ "$ELASTIC_ALREADY_RUNNING" = false ] && [ -n "$ELASTIC_PID" ]; then
+# Wait for Elastic stack to start (only if we started local Elastic)
+if [ "$USE_LOCAL_ELASTIC" = "true" ] && [ "$ELASTIC_ALREADY_RUNNING" = false ] && [ -n "$ELASTIC_PID" ]; then
     echo "⏳ Waiting for Elastic stack to start..." >> "$SETUP_LOG" 2>&1
     # Wait for the process and capture exit code
     wait $ELASTIC_PID 2>/dev/null
@@ -342,10 +335,11 @@ if [ "$ELASTIC_ALREADY_RUNNING" = false ] && [ -n "$ELASTIC_PID" ]; then
     fi
 fi
 
-# Wait for Elasticsearch to be ready (with timeout)
-echo "⏳ Waiting for Elasticsearch to be ready..."
-ELASTIC_READY=false
-for i in {1..60}; do
+# Wait for Elasticsearch to be ready (only for local Elastic)
+if [ "$USE_LOCAL_ELASTIC" = "true" ]; then
+    echo "⏳ Waiting for Elasticsearch to be ready..." >> "$SETUP_LOG" 2>&1
+    ELASTIC_READY=false
+    for i in {1..60}; do
     if curl -s http://localhost:9200 > /dev/null 2>&1; then
         echo "✅ Elasticsearch is ready"
         ELASTIC_READY=true
@@ -390,7 +384,7 @@ if command -v k3s &> /dev/null && [ -f /etc/rancher/k3s/k3s.yaml ] && kubectl cl
     # Copy it to a user-accessible location and set KUBECONFIG
     mkdir -p ~/.kube
     # Check if config already exists and is the same file (symlink)
-    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config 2>/dev/null)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml 2>/dev/null)" ]; then
+    if [ ! -f ~/.kube/config ] || [ "$(readlink -f ~/.kube/config)" != "$(readlink -f /etc/rancher/k3s/k3s.yaml)" ]; then
         cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
         chmod 600 ~/.kube/config
     fi
@@ -692,6 +686,7 @@ for bashrc in /home/*/.bashrc; do
             echo "fi" >> "$bashrc"
     fi
 done
+fi
 
 # Exit immediately so Instruqt can show the terminal
 exit 0
