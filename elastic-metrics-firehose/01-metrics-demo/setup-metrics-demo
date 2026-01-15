@@ -244,7 +244,20 @@ else
     
     if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
         echo "❌ ERROR: Serverless observability instance did not become ready"
-        echo "   Check es3-api VM logs for details"
+        echo ""
+        echo "   Possible causes:"
+        echo "   1. es3-api VM image 'elastic-pmm/es3-api-v2' is not accessible"
+        echo "      → Request access from PMM team"
+        echo "   2. Key broker (JSON server) on es3-api:8081 is not running"
+        echo "      → Check es3-api VM logs for details"
+        echo "   3. Network connectivity issues between VMs"
+        echo ""
+        echo "   The key broker provides credentials via:"
+        echo "   - JSON server: http://es3-api:8081"
+        echo "   - Agent variables: ES_URL, ES_API_KEY, etc."
+        echo ""
+        echo "   Without access to the es3-api VM, serverless setup cannot proceed."
+        echo "   Consider using USE_LOCAL_ELASTIC=true as a fallback."
         exit 1
     fi
     

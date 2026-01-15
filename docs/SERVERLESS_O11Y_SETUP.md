@@ -270,15 +270,39 @@ The script already handles `USE_LOCAL_ELASTIC=false` correctly. No changes neede
 
 ## Considerations
 
-1. **API Key Required**: Need `PME_CLOUD_INSTRUQT_API_KEY` environment variable (set by Instruqt)
-2. **Network Access**: VM needs internet access to create serverless project
-3. **Cost**: Serverless instances may have usage costs (but Instruqt handles cleanup)
-4. **Region**: Default is `aws-us-east-1`, can be configured
-5. **Product Tier** (when `PROJECT_TYPE=observability`): 
+1. **Image Access Required**: 
+   - The `elastic-pmm/es3-api-v2` image must be accessible to your Instruqt team
+   - If you see "Image is not supported" or "Not allowed" errors, you need to request access from the PMM team
+   - Without this image, the es3-api VM cannot be created, and the key broker (JSON server) will not be available
+
+2. **Key Broker Access**:
+   - The key broker is a JSON server running on `es3-api:8081` that serves project credentials
+   - If the es3-api VM cannot be created, the key broker will not be accessible
+   - The setup script has a fallback to use agent variables, but these also require the es3-api VM to set them
+   - **Workaround**: If you have access to `PME_CLOUD_INSTRUQT_API_KEY` on the metrics-demo VM, you could potentially run the es3-api setup script directly there, but this is not recommended
+
+3. **API Key Required**: Need `PME_CLOUD_INSTRUQT_API_KEY` environment variable (set by Instruqt on es3-api VM)
+4. **Network Access**: VM needs internet access to create serverless project
+5. **Cost**: Serverless instances may have usage costs (but Instruqt handles cleanup)
+6. **Region**: Default is `aws-us-east-1`, can be configured
+7. **Product Tier** (when `PROJECT_TYPE=observability`): 
    - `logs_essentials` - Basic observability features (logs-focused)
    - `complete` - Full observability features including metrics, APM, and logs (recommended for metrics demo)
    
    **Note**: `observability` is the `PROJECT_TYPE`, not a `PRODUCT_TIER` value. The `PRODUCT_TIER` is a separate setting that determines which features are enabled in the observability project.
+
+## Current Status and Required Actions
+
+**⚠️ Image Access Issue**: The `elastic-pmm/es3-api-v2` image is currently not accessible for this team.
+
+**To proceed with serverless setup, you need to:**
+1. Request access to `elastic-pmm/es3-api-v2` image from the PMM team
+2. Verify the image is accessible in your Instruqt account
+3. Once accessible, the setup will work automatically
+
+**Alternative**: If image access cannot be obtained, you may need to:
+- Use `start-local` (with disk space limitations)
+- Or manually provide `ELASTIC_OTLP_ENDPOINT` and `ELASTIC_API_KEY` as environment variables
 
 ## Testing Checklist
 
